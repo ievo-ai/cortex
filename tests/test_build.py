@@ -162,6 +162,63 @@ def test_template_contains_required_variables() -> None:
     assert '{% if provider ==' in source, "Missing {% if provider == ... %} conditional block"
 
 
+# ---------------------------------------------------------------------------
+# Step 3: Integration tests — build wires render_template into targets (AC-2, AC-3, AC-4)
+# ---------------------------------------------------------------------------
+
+
+def test_build_claude_ievo_contains_version(tmp_path: Path) -> None:
+    """dist/claude/iEVO.md contains the version tag and no unrendered Jinja2 syntax."""
+    result = run_build(tmp_path, tag="v1.2.0")
+    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+
+    ievo_md = tmp_path / "claude" / "iEVO.md"
+    assert ievo_md.exists(), "dist/claude/iEVO.md not found"
+    content = ievo_md.read_text()
+
+    assert "v1.2.0" in content, "Version tag not found in dist/claude/iEVO.md"
+    assert "{{" not in content, "Unrendered {{ in dist/claude/iEVO.md"
+    assert "{%" not in content, "Unrendered {% in dist/claude/iEVO.md"
+
+
+def test_build_codex_ievo_contains_version(tmp_path: Path) -> None:
+    """dist/codex/iEVO.md contains the version tag and no unrendered Jinja2 syntax."""
+    result = run_build(tmp_path, tag="v1.2.0")
+    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+
+    ievo_md = tmp_path / "codex" / "iEVO.md"
+    assert ievo_md.exists(), "dist/codex/iEVO.md not found"
+    content = ievo_md.read_text()
+
+    assert "v1.2.0" in content, "Version tag not found in dist/codex/iEVO.md"
+    assert "{{" not in content, "Unrendered {{ in dist/codex/iEVO.md"
+    assert "{%" not in content, "Unrendered {% in dist/codex/iEVO.md"
+
+
+def test_build_provider_specific_content_claude_only(tmp_path: Path) -> None:
+    """CLAUDE_ONLY sentinel appears only in dist/claude/iEVO.md, not in dist/codex/iEVO.md."""
+    result = run_build(tmp_path, tag="v1.0.0")
+    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+
+    claude_content = (tmp_path / "claude" / "iEVO.md").read_text()
+    codex_content = (tmp_path / "codex" / "iEVO.md").read_text()
+
+    assert "CLAUDE_ONLY" in claude_content, "CLAUDE_ONLY sentinel missing from dist/claude/iEVO.md"
+    assert "CLAUDE_ONLY" not in codex_content, "CLAUDE_ONLY sentinel leaked into dist/codex/iEVO.md"
+
+
+def test_build_provider_specific_content_codex_only(tmp_path: Path) -> None:
+    """CODEX_ONLY sentinel appears only in dist/codex/iEVO.md, not in dist/claude/iEVO.md."""
+    result = run_build(tmp_path, tag="v1.0.0")
+    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+
+    claude_content = (tmp_path / "claude" / "iEVO.md").read_text()
+    codex_content = (tmp_path / "codex" / "iEVO.md").read_text()
+
+    assert "CODEX_ONLY" in codex_content, "CODEX_ONLY sentinel missing from dist/codex/iEVO.md"
+    assert "CODEX_ONLY" not in claude_content, "CODEX_ONLY sentinel leaked into dist/claude/iEVO.md"
+
+
 def test_render_template_provider_conditional(tmp_path: Path) -> None:
     """render_template() includes/excludes content based on provider conditional."""
     template_file = tmp_path / "kernel" / "test.md.j2"
