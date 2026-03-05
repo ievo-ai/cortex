@@ -32,14 +32,11 @@ The `src/kernel/iEVO.md.j2` template supports the following variables:
 | Variable | Type | Source | Example |
 |----------|------|--------|---------|
 | `cortex_version` | string | `--tag` CLI argument | `"v1.2.0"` |
-| `provider` | string | set per render pass | `"claude"`, `"codex"` |
 
-Provider-specific blocks use Jinja2 conditionals:
+Variables are injected into the template using standard Jinja2 syntax:
 
 ```jinja2
-{% if provider == "claude" %}
-Claude Code-specific content here.
-{% endif %}
+<!-- cortex {{ cortex_version }} -->
 ```
 
 ## Release assets
@@ -48,13 +45,9 @@ Each GitHub Release includes `cortex-<tag>.tar.gz` containing:
 
 ```
 cortex-<tag>.tar.gz
-├── claude/             # Claude Code artifacts (.md agent files, iEVO.md)
-│   ├── iEVO.md         # Rendered from src/kernel/iEVO.md.j2 (provider="claude")
-│   └── agents/
-│       └── *.md
-└── codex/              # OpenAI Codex artifacts
-    ├── iEVO.md         # Rendered from src/kernel/iEVO.md.j2 (provider="codex")
-    └── BUILD_TARGET.md
+├── iEVO.md             # Rendered from src/kernel/iEVO.md.j2
+└── agents/
+    └── *.md
 ```
 
 ## Building locally
