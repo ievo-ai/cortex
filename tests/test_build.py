@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tarfile
 from pathlib import Path
+from unittest.mock import patch
 
 import jinja2
 import pytest
@@ -24,7 +25,14 @@ CORTEX_ROOT = Path(__file__).parent.parent
 def run_build(tmp_path: Path, tag: str = "v1.0.0") -> subprocess.CompletedProcess[str]:
     """Run build.py from the cortex root into the given tmp_path."""
     return subprocess.run(
-        [sys.executable, str(CORTEX_ROOT / "build.py"), "--tag", tag, "--dist", str(tmp_path)],
+        [
+            sys.executable,
+            str(CORTEX_ROOT / "build.py"),
+            "--tag",
+            tag,
+            "--dist",
+            str(tmp_path),
+        ],
         capture_output=True,
         text=True,
         cwd=str(CORTEX_ROOT),
@@ -57,8 +65,8 @@ def test_tarball_contains_both_providers(tmp_path: Path) -> None:
     assert codex_files, f"No codex/ entries in tarball. Names: {names}"
 
 
-def test_tarball_claude_contains_ievo_md(tmp_path: Path) -> None:
-    """The claude/ directory in the tarball contains iEVO.md."""
+def test_tarball_contains_ievo_md_at_root(tmp_path: Path) -> None:
+    """The tarball contains iEVO.md at root level — not under a provider subdirectory (AC-4)."""
     result = run_build(tmp_path, tag="v1.0.0")
     assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
 
@@ -66,7 +74,13 @@ def test_tarball_claude_contains_ievo_md(tmp_path: Path) -> None:
     with tarfile.open(tarball, "r:gz") as tf:
         names = tf.getnames()
 
-    assert "claude/iEVO.md" in names, f"claude/iEVO.md missing. Names: {names}"
+    assert "iEVO.md" in names, f"iEVO.md missing at root of tarball. Names: {names}"
+    assert "claude/iEVO.md" not in names, (
+        f"claude/iEVO.md should not be in tarball. Names: {names}"
+    )
+    assert "codex/iEVO.md" not in names, (
+        f"codex/iEVO.md should not be in tarball. Names: {names}"
+    )
 
 
 def test_tarball_codex_contains_build_target_md(tmp_path: Path) -> None:
@@ -78,7 +92,9 @@ def test_tarball_codex_contains_build_target_md(tmp_path: Path) -> None:
     with tarfile.open(tarball, "r:gz") as tf:
         names = tf.getnames()
 
-    assert "codex/BUILD_TARGET.md" in names, f"codex/BUILD_TARGET.md missing. Names: {names}"
+    assert "codex/BUILD_TARGET.md" in names, (
+        f"codex/BUILD_TARGET.md missing. Names: {names}"
+    )
 
 
 def test_build_idempotent(tmp_path: Path) -> None:
@@ -106,25 +122,25 @@ def test_build_uses_provided_tag(tmp_path: Path) -> None:
     assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
 
     tarball = tmp_path / "cortex-v2.3.4.tar.gz"
-    assert tarball.exists(), f"Expected cortex-v2.3.4.tar.gz but found: {list(tmp_path.iterdir())}"
+    assert tarball.exists(), (
+        f"Expected cortex-v2.3.4.tar.gz but found: {list(tmp_path.iterdir())}"
+    )
 
 
 # ---------------------------------------------------------------------------
 # Step 1: render_template helper unit tests
 # ---------------------------------------------------------------------------
 
+
 def test_render_template_substitutes_variables(tmp_path: Path) -> None:
-    """render_template() substitutes {{ cortex_version }} and {{ provider }} correctly."""
+    """render_template() substitutes {{ cortex_version }} correctly."""
     template_file = tmp_path / "kernel" / "test.md.j2"
     template_file.parent.mkdir(parents=True)
-    template_file.write_text(
-        "Cortex {{ cortex_version }} — provider: {{ provider }}\n"
-    )
+    template_file.write_text("Cortex {{ cortex_version }}\n")
 
-    result = render_template(template_file, {"cortex_version": "v1.2.0", "provider": "claude"})
+    result = render_template(template_file, {"cortex_version": "v1.2.0"})
 
     assert "v1.2.0" in result
-    assert "claude" in result
     assert "{{" not in result
 
 
@@ -135,7 +151,7 @@ def test_render_template_strict_undefined_raises(tmp_path: Path) -> None:
     template_file.write_text("Version: {{ undefined_var }}\n")
 
     with pytest.raises(jinja2.UndefinedError):
-        render_template(template_file, {"cortex_version": "v1.0.0", "provider": "claude"})
+        render_template(template_file, {"cortex_version": "v1.0.0"})
 
 
 # ---------------------------------------------------------------------------
@@ -154,12 +170,17 @@ def test_template_source_exists() -> None:
 
 
 def test_template_contains_required_variables() -> None:
-    """iEVO.md.j2 contains {{ cortex_version }} and at least one provider conditional."""
+    """iEVO.md.j2 contains {{ cortex_version }} and no provider Jinja2 references (AC-1)."""
     template_path = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
     source = template_path.read_text()
 
     assert "{{ cortex_version }}" in source, "Missing {{ cortex_version }} placeholder"
-    assert '{% if provider ==' in source, "Missing {% if provider == ... %} conditional block"
+    assert "{{ provider }}" not in source, (
+        "Template must not use {{ provider }} variable"
+    )
+    assert "{% if provider" not in source, (
+        "Template must not use {% if provider %} blocks"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -167,56 +188,31 @@ def test_template_contains_required_variables() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_claude_ievo_contains_version(tmp_path: Path) -> None:
-    """dist/claude/iEVO.md contains the version tag and no unrendered Jinja2 syntax."""
+def test_build_ievo_md_contains_version(tmp_path: Path) -> None:
+    """dist/iEVO.md contains the version tag and no unrendered Jinja2 syntax (AC-2)."""
     result = run_build(tmp_path, tag="v1.2.0")
     assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
 
-    ievo_md = tmp_path / "claude" / "iEVO.md"
-    assert ievo_md.exists(), "dist/claude/iEVO.md not found"
+    ievo_md = tmp_path / "iEVO.md"
+    assert ievo_md.exists(), "dist/iEVO.md not found"
     content = ievo_md.read_text()
 
-    assert "v1.2.0" in content, "Version tag not found in dist/claude/iEVO.md"
-    assert "{{" not in content, "Unrendered {{ in dist/claude/iEVO.md"
-    assert "{%" not in content, "Unrendered {% in dist/claude/iEVO.md"
+    assert "v1.2.0" in content, "Version tag not found in dist/iEVO.md"
+    assert "{{" not in content, "Unrendered {{ in dist/iEVO.md"
+    assert "{%" not in content, "Unrendered {% in dist/iEVO.md"
 
 
-def test_build_codex_ievo_contains_version(tmp_path: Path) -> None:
-    """dist/codex/iEVO.md contains the version tag and no unrendered Jinja2 syntax."""
-    result = run_build(tmp_path, tag="v1.2.0")
+def test_build_no_provider_ievo_md_in_subdirs(tmp_path: Path) -> None:
+    """dist/claude/iEVO.md and dist/codex/iEVO.md must NOT exist after build (AC-3)."""
+    result = run_build(tmp_path, tag="v2.0.0")
     assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
 
-    ievo_md = tmp_path / "codex" / "iEVO.md"
-    assert ievo_md.exists(), "dist/codex/iEVO.md not found"
-    content = ievo_md.read_text()
-
-    assert "v1.2.0" in content, "Version tag not found in dist/codex/iEVO.md"
-    assert "{{" not in content, "Unrendered {{ in dist/codex/iEVO.md"
-    assert "{%" not in content, "Unrendered {% in dist/codex/iEVO.md"
-
-
-def test_build_provider_specific_content_claude_only(tmp_path: Path) -> None:
-    """CLAUDE_ONLY sentinel appears only in dist/claude/iEVO.md, not in dist/codex/iEVO.md."""
-    result = run_build(tmp_path, tag="v1.0.0")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
-
-    claude_content = (tmp_path / "claude" / "iEVO.md").read_text()
-    codex_content = (tmp_path / "codex" / "iEVO.md").read_text()
-
-    assert "CLAUDE_ONLY" in claude_content, "CLAUDE_ONLY sentinel missing from dist/claude/iEVO.md"
-    assert "CLAUDE_ONLY" not in codex_content, "CLAUDE_ONLY sentinel leaked into dist/codex/iEVO.md"
-
-
-def test_build_provider_specific_content_codex_only(tmp_path: Path) -> None:
-    """CODEX_ONLY sentinel appears only in dist/codex/iEVO.md, not in dist/claude/iEVO.md."""
-    result = run_build(tmp_path, tag="v1.0.0")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
-
-    claude_content = (tmp_path / "claude" / "iEVO.md").read_text()
-    codex_content = (tmp_path / "codex" / "iEVO.md").read_text()
-
-    assert "CODEX_ONLY" in codex_content, "CODEX_ONLY sentinel missing from dist/codex/iEVO.md"
-    assert "CODEX_ONLY" not in claude_content, "CODEX_ONLY sentinel leaked into dist/claude/iEVO.md"
+    assert not (tmp_path / "claude" / "iEVO.md").exists(), (
+        "dist/claude/iEVO.md must not be created"
+    )
+    assert not (tmp_path / "codex" / "iEVO.md").exists(), (
+        "dist/codex/iEVO.md must not be created"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -228,14 +224,25 @@ def test_build_fails_on_missing_template(tmp_path: Path) -> None:
     """build.py exits non-zero and mentions iEVO.md.j2 when template is missing."""
     # Copy cortex source to a temp dir so we can remove the template
     build_dir = tmp_path / "cortex_src"
-    shutil.copytree(CORTEX_ROOT, build_dir, ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"))
+    shutil.copytree(
+        CORTEX_ROOT,
+        build_dir,
+        ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"),
+    )
 
     template = build_dir / "src" / "kernel" / "iEVO.md.j2"
     template.unlink()
 
     dist_dir = tmp_path / "dist"
     result = subprocess.run(
-        [sys.executable, str(build_dir / "build.py"), "--tag", "v1.0.0", "--dist", str(dist_dir)],
+        [
+            sys.executable,
+            str(build_dir / "build.py"),
+            "--tag",
+            "v1.0.0",
+            "--dist",
+            str(dist_dir),
+        ],
         capture_output=True,
         text=True,
         cwd=str(build_dir),
@@ -243,7 +250,9 @@ def test_build_fails_on_missing_template(tmp_path: Path) -> None:
     )
 
     assert result.returncode != 0, "Expected non-zero exit when template is missing"
-    assert "iEVO.md.j2" in result.stderr, f"Expected iEVO.md.j2 in stderr, got:\n{result.stderr}"
+    assert "iEVO.md.j2" in result.stderr, (
+        f"Expected iEVO.md.j2 in stderr, got:\n{result.stderr}"
+    )
 
     tarballs = list(dist_dir.glob("cortex-*.tar.gz")) if dist_dir.exists() else []
     assert not tarballs, f"No tarball should be created on error, found: {tarballs}"
@@ -253,14 +262,25 @@ def test_build_fails_on_undefined_variable(tmp_path: Path) -> None:
     """build.py exits non-zero and mentions the undefined var when template has unknown var."""
     # Copy cortex source to a temp dir so we can inject a bad template
     build_dir = tmp_path / "cortex_src"
-    shutil.copytree(CORTEX_ROOT, build_dir, ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"))
+    shutil.copytree(
+        CORTEX_ROOT,
+        build_dir,
+        ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"),
+    )
 
     template = build_dir / "src" / "kernel" / "iEVO.md.j2"
     template.write_text("Version: {{ undefined_var }}\n")
 
     dist_dir = tmp_path / "dist"
     result = subprocess.run(
-        [sys.executable, str(build_dir / "build.py"), "--tag", "v1.0.0", "--dist", str(dist_dir)],
+        [
+            sys.executable,
+            str(build_dir / "build.py"),
+            "--tag",
+            "v1.0.0",
+            "--dist",
+            str(dist_dir),
+        ],
         capture_output=True,
         text=True,
         cwd=str(build_dir),
@@ -268,39 +288,48 @@ def test_build_fails_on_undefined_variable(tmp_path: Path) -> None:
     )
 
     assert result.returncode != 0, "Expected non-zero exit on undefined variable"
-    assert "undefined_var" in result.stderr, f"Expected undefined_var in stderr, got:\n{result.stderr}"
+    assert "undefined_var" in result.stderr, (
+        f"Expected undefined_var in stderr, got:\n{result.stderr}"
+    )
 
     tarballs = list(dist_dir.glob("cortex-*.tar.gz")) if dist_dir.exists() else []
     assert not tarballs, f"No tarball should be created on error, found: {tarballs}"
 
 
 def test_build_idempotent_rendered_content(tmp_path: Path) -> None:
-    """Running build.py twice produces byte-identical iEVO.md files in both providers."""
+    """Running build.py twice produces byte-identical dist/iEVO.md (AC-6)."""
     run_build(tmp_path, tag="v1.2.0")
-    claude_first = (tmp_path / "claude" / "iEVO.md").read_bytes()
-    codex_first = (tmp_path / "codex" / "iEVO.md").read_bytes()
+    first = (tmp_path / "iEVO.md").read_bytes()
 
     run_build(tmp_path, tag="v1.2.0")
-    claude_second = (tmp_path / "claude" / "iEVO.md").read_bytes()
-    codex_second = (tmp_path / "codex" / "iEVO.md").read_bytes()
+    second = (tmp_path / "iEVO.md").read_bytes()
 
-    assert claude_first == claude_second, "dist/claude/iEVO.md differs between runs"
-    assert codex_first == codex_second, "dist/codex/iEVO.md differs between runs"
+    assert first == second, "dist/iEVO.md differs between runs"
 
 
-def test_render_template_provider_conditional(tmp_path: Path) -> None:
-    """render_template() includes/excludes content based on provider conditional."""
-    template_file = tmp_path / "kernel" / "test.md.j2"
-    template_file.parent.mkdir(parents=True)
-    template_file.write_text(
-        "{% if provider == \"claude\" %}CLAUDE_ONLY{% endif %}\n"
-        "{% if provider == \"codex\" %}CODEX_ONLY{% endif %}\n"
+def test_build_ievo_render_context_has_no_provider(tmp_path: Path) -> None:
+    """The render call for iEVO.md.j2 in build.py passes only cortex_version (AC-5)."""
+    import build as build_module
+
+    captured_contexts: list[dict[str, str]] = []
+    original_render = build_module.render_template
+
+    def capturing_render(
+        template_path: Path, context: dict[str, str], loader_root: Path | None = None
+    ) -> str:
+        if template_path.name == "iEVO.md.j2":
+            captured_contexts.append(dict(context))
+        return original_render(template_path, context, loader_root)
+
+    with patch.object(build_module, "render_template", side_effect=capturing_render):
+        build_module.build(tag="v2.0.0", dist_dir=tmp_path)
+
+    assert captured_contexts, "render_template was never called for iEVO.md.j2"
+    assert len(captured_contexts) == 1, (
+        f"render_template called {len(captured_contexts)} times for iEVO.md.j2, expected 1"
     )
-
-    claude_result = render_template(template_file, {"cortex_version": "v1.0.0", "provider": "claude"})
-    codex_result = render_template(template_file, {"cortex_version": "v1.0.0", "provider": "codex"})
-
-    assert "CLAUDE_ONLY" in claude_result
-    assert "CODEX_ONLY" not in claude_result
-    assert "CODEX_ONLY" in codex_result
-    assert "CLAUDE_ONLY" not in codex_result
+    ctx = captured_contexts[0]
+    assert "provider" not in ctx, (
+        f"'provider' key found in iEVO.md render context: {ctx}"
+    )
+    assert "cortex_version" in ctx, f"'cortex_version' missing from context: {ctx}"
