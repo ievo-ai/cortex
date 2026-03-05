@@ -21,7 +21,7 @@ from build import render_template
 CORTEX_ROOT = Path(__file__).parent.parent
 
 
-def run_build(tmp_path: Path, tag: str = "v1.0.0") -> subprocess.CompletedProcess:
+def run_build(tmp_path: Path, tag: str = "v1.0.0") -> subprocess.CompletedProcess[str]:
     """Run build.py from the cortex root into the given tmp_path."""
     return subprocess.run(
         [sys.executable, str(CORTEX_ROOT / "build.py"), "--tag", tag, "--dist", str(tmp_path)],

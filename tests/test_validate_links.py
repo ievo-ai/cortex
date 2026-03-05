@@ -26,7 +26,7 @@ CORTEX_ROOT = Path(__file__).parent.parent
 
 
 def test_validate_links_skipped_when_lychee_not_installed(
-    tmp_path: Path, capsys: pytest.CaptureFixture
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """When lychee binary is absent, validate_links() warns to stderr and returns (no error)."""
     with patch("shutil.which", return_value=None):
@@ -117,7 +117,7 @@ def test_valid_build_passes_lychee(tmp_path: Path) -> None:
 
 
 @_skip_if_no_lychee
-def test_broken_same_file_anchor_fails(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_broken_same_file_anchor_fails(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """AC-2: A broken same-file anchor in dist/claude/iEVO.md causes lychee to exit non-zero.
 
     Also asserts:
@@ -153,7 +153,7 @@ def test_broken_same_file_anchor_fails(tmp_path: Path, capsys: pytest.CaptureFix
 
 
 @_skip_if_no_lychee
-def test_missing_cross_file_target_fails(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_missing_cross_file_target_fails(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """AC-3: A link to a non-existent file in dist/ causes lychee to exit non-zero.
 
     Also asserts:
@@ -188,7 +188,7 @@ def test_missing_cross_file_target_fails(tmp_path: Path, capsys: pytest.CaptureF
 
 
 @_skip_if_no_lychee
-def test_broken_cross_file_anchor_fails(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_broken_cross_file_anchor_fails(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """AC-4: A broken cross-file anchor causes lychee to exit non-zero.
 
     Also asserts:
