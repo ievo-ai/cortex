@@ -18,10 +18,11 @@ cortex/
 │   └── kernel/
 │       └── iEVO.md.j2  # iEVO pipeline conventions — Jinja2 template source
 ├── build.py            # Build script — renders provider artifacts + creates tarball
+│                       #   └── validate_links() — runs lychee on dist/ (CI only)
 ├── tests/              # Build script tests
 └── .github/
     └── workflows/
-        └── release.yml # CI: tag push → build → GitHub Release asset
+        └── release.yml # CI: tag push → build → lychee link validation → GitHub Release asset
 ```
 
 ## Template variables
@@ -63,6 +64,9 @@ python build.py --tag v1.0.0
 # Output: dist/cortex-v1.0.0.tar.gz
 ```
 
+Link validation (`validate_links()`) runs automatically in CI after the build.
+Locally, it is skipped if `lychee` is not on `PATH` — no action required for local builds.
+
 ## Running tests
 
 ```bash
@@ -73,6 +77,7 @@ pytest tests/
 
 - `pyyaml` — YAML parsing for agent templates
 - `jinja2>=3.1` — template rendering for `src/kernel/iEVO.md.j2`
+- `lychee` — Markdown link validator (Rust binary, CI only — not a Python dependency)
 
 ## Integration
 
