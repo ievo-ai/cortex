@@ -116,3 +116,21 @@ def test_uv_run_pytest_passes() -> None:
     assert result.returncode == 0, (
         f"uv run pytest failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
+
+
+# --- Subtask 05: End-to-end smoke test ---
+
+
+def test_uv_run_build_produces_tarball(tmp_path: Path) -> None:
+    """AC-7: uv run python build.py --tag v0.0.1 produces dist/cortex-v0.0.1.tar.gz."""
+    result = subprocess.run(
+        ["uv", "run", "python", "build.py", "--tag", "v0.0.1", "--dist", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    assert result.returncode == 0, (
+        f"build.py failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    tarball = tmp_path / "cortex-v0.0.1.tar.gz"
+    assert tarball.exists(), f"Expected tarball not found: {tarball}"
