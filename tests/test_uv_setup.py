@@ -39,3 +39,36 @@ def test_pyproject_dev_extras() -> None:
     )
     assert any(d.startswith("ruff") for d in dev_deps), "ruff not in dev extras"
     assert any(d.startswith("mypy") for d in dev_deps), "mypy not in dev extras"
+
+
+# --- Subtask 04: CI migration to uv ---
+
+
+def test_ci_no_pip_install() -> None:
+    """AC-5: CI release.yml does not use pip install."""
+    ci_path = REPO_ROOT / ".github" / "workflows" / "release.yml"
+    content = ci_path.read_text()
+    assert "pip install" not in content, "CI still uses 'pip install'"
+
+
+def test_ci_uses_setup_uv() -> None:
+    """AC-6: CI uses astral-sh/setup-uv action."""
+    ci_path = REPO_ROOT / ".github" / "workflows" / "release.yml"
+    content = ci_path.read_text()
+    assert "astral-sh/setup-uv" in content, "CI does not use astral-sh/setup-uv"
+
+
+def test_ci_uses_uv_sync_frozen() -> None:
+    """AC-5: CI uses uv sync --frozen to install deps."""
+    ci_path = REPO_ROOT / ".github" / "workflows" / "release.yml"
+    content = ci_path.read_text()
+    assert "uv sync --frozen" in content, "CI does not use 'uv sync --frozen'"
+
+
+def test_ci_uses_uv_run_for_build() -> None:
+    """AC-5: CI uses uv run python build.py for the build step."""
+    ci_path = REPO_ROOT / ".github" / "workflows" / "release.yml"
+    content = ci_path.read_text()
+    assert "uv run python build.py" in content, (
+        "CI does not use 'uv run python build.py'"
+    )
