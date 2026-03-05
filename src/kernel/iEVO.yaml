@@ -1,0 +1,5 @@
+# iEVO Kernel Source (YAML template — placeholder for v1)
+# Full YAML templating defined in separate REQ (IDEA-004)
+name: iEVO
+version: "1.0.0"
+description: "iEvo pipeline conventions and agent orchestration kernel."

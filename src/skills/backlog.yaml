@@ -1,0 +1,4 @@
+# Skill source template — placeholder for v1
+# Full YAML templating defined in separate REQ (IDEA-004)
+name: backlog
+description: "Backlog management skill."
