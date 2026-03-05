@@ -138,6 +138,30 @@ def test_render_template_strict_undefined_raises(tmp_path: Path) -> None:
         render_template(template_file, {"cortex_version": "v1.0.0", "provider": "claude"})
 
 
+# ---------------------------------------------------------------------------
+# Step 2: Template source file tests (AC-1)
+# ---------------------------------------------------------------------------
+
+
+def test_template_source_exists() -> None:
+    """src/kernel/iEVO.md.j2 exists and is parseable by Jinja2."""
+    template_path = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
+    assert template_path.exists(), f"Template not found: {template_path}"
+
+    env = jinja2.Environment()
+    source = template_path.read_text()
+    env.parse(source)  # raises TemplateSyntaxError if invalid
+
+
+def test_template_contains_required_variables() -> None:
+    """iEVO.md.j2 contains {{ cortex_version }} and at least one provider conditional."""
+    template_path = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
+    source = template_path.read_text()
+
+    assert "{{ cortex_version }}" in source, "Missing {{ cortex_version }} placeholder"
+    assert '{% if provider ==' in source, "Missing {% if provider == ... %} conditional block"
+
+
 def test_render_template_provider_conditional(tmp_path: Path) -> None:
     """render_template() includes/excludes content based on provider conditional."""
     template_file = tmp_path / "kernel" / "test.md.j2"
