@@ -72,3 +72,47 @@ def test_ci_uses_uv_run_for_build() -> None:
     assert "uv run python build.py" in content, (
         "CI does not use 'uv run python build.py'"
     )
+
+
+# --- Subtask 03: uv.lock regeneration + uv sync verification ---
+
+
+def test_uv_lock_exists() -> None:
+    """AC-3: uv.lock exists at repo root."""
+    assert (REPO_ROOT / "uv.lock").exists(), "uv.lock not found at repo root"
+
+
+def test_uv_lock_contains_cortex_entry() -> None:
+    """AC-3: uv.lock contains a cortex package entry (reproducible install)."""
+    content = (REPO_ROOT / "uv.lock").read_text()
+    assert 'name = "cortex"' in content, (
+        "uv.lock does not contain cortex package entry"
+    )
+
+
+def test_uv_lock_has_dev_deps() -> None:
+    """AC-3: uv.lock resolves dev extras (ruff, mypy in lock)."""
+    content = (REPO_ROOT / "uv.lock").read_text()
+    assert 'name = "ruff"' in content, "ruff not resolved in uv.lock"
+    assert 'name = "mypy"' in content, "mypy not resolved in uv.lock"
+
+
+def test_uv_run_pytest_passes() -> None:
+    """AC-4: uv run pytest tests/ passes — no regressions (excludes this file)."""
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "pytest",
+            "tests/",
+            "--ignore=tests/test_uv_setup.py",
+            "--tb=short",
+            "-q",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    assert result.returncode == 0, (
+        f"uv run pytest failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
