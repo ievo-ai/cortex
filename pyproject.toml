@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "cortex"
 version = "0.1.0"
@@ -5,7 +9,13 @@ requires-python = ">=3.12"
 dependencies = ["pyyaml", "jinja2>=3.1"]
 
 [project.optional-dependencies]
-test = ["pytest"]
+dev = ["pytest", "ruff", "mypy"]
+
+[tool.uv]
+package = false
+
+[tool.hatch.build.targets.wheel]
+packages = []
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
