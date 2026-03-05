@@ -155,7 +155,14 @@ def main() -> None:
     args = parser.parse_args()
 
     dist_dir = Path(args.dist)
-    tarball = build(tag=args.tag, dist_dir=dist_dir)
+    try:
+        tarball = build(tag=args.tag, dist_dir=dist_dir)
+    except FileNotFoundError as exc:
+        print(f"Error: template file not found — {exc}", file=sys.stderr)
+        sys.exit(1)
+    except jinja2.UndefinedError as exc:
+        print(f"Error: undefined template variable — {exc}", file=sys.stderr)
+        sys.exit(1)
     print(f"Built: {tarball}")
 
 

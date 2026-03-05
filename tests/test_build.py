@@ -219,6 +219,81 @@ def test_build_provider_specific_content_codex_only(tmp_path: Path) -> None:
     assert "CODEX_ONLY" not in claude_content, "CODEX_ONLY sentinel leaked into dist/claude/iEVO.md"
 
 
+# ---------------------------------------------------------------------------
+# Step 4: Error handling + idempotency tests (AC-5, AC-6, AC-7)
+# ---------------------------------------------------------------------------
+
+
+def test_build_fails_on_missing_template(tmp_path: Path) -> None:
+    """build.py exits non-zero and mentions iEVO.md.j2 when template is missing."""
+    import os
+    import shutil
+
+    # Copy cortex source to a temp dir so we can remove the template
+    build_dir = tmp_path / "cortex_src"
+    shutil.copytree(CORTEX_ROOT, build_dir, ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"))
+
+    template = build_dir / "src" / "kernel" / "iEVO.md.j2"
+    template.unlink()
+
+    dist_dir = tmp_path / "dist"
+    result = subprocess.run(
+        [sys.executable, str(build_dir / "build.py"), "--tag", "v1.0.0", "--dist", str(dist_dir)],
+        capture_output=True,
+        text=True,
+        cwd=str(build_dir),
+        env={**os.environ, "PYTHONPATH": str(build_dir)},
+    )
+
+    assert result.returncode != 0, "Expected non-zero exit when template is missing"
+    assert "iEVO.md.j2" in result.stderr, f"Expected iEVO.md.j2 in stderr, got:\n{result.stderr}"
+
+    tarballs = list(dist_dir.glob("cortex-*.tar.gz")) if dist_dir.exists() else []
+    assert not tarballs, f"No tarball should be created on error, found: {tarballs}"
+
+
+def test_build_fails_on_undefined_variable(tmp_path: Path) -> None:
+    """build.py exits non-zero and mentions the undefined var when template has unknown var."""
+    import os
+    import shutil
+
+    # Copy cortex source to a temp dir so we can inject a bad template
+    build_dir = tmp_path / "cortex_src"
+    shutil.copytree(CORTEX_ROOT, build_dir, ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"))
+
+    template = build_dir / "src" / "kernel" / "iEVO.md.j2"
+    template.write_text("Version: {{ undefined_var }}\n")
+
+    dist_dir = tmp_path / "dist"
+    result = subprocess.run(
+        [sys.executable, str(build_dir / "build.py"), "--tag", "v1.0.0", "--dist", str(dist_dir)],
+        capture_output=True,
+        text=True,
+        cwd=str(build_dir),
+        env={**os.environ, "PYTHONPATH": str(build_dir)},
+    )
+
+    assert result.returncode != 0, "Expected non-zero exit on undefined variable"
+    assert "undefined_var" in result.stderr, f"Expected undefined_var in stderr, got:\n{result.stderr}"
+
+    tarballs = list(dist_dir.glob("cortex-*.tar.gz")) if dist_dir.exists() else []
+    assert not tarballs, f"No tarball should be created on error, found: {tarballs}"
+
+
+def test_build_idempotent_rendered_content(tmp_path: Path) -> None:
+    """Running build.py twice produces byte-identical iEVO.md files in both providers."""
+    run_build(tmp_path, tag="v1.2.0")
+    claude_first = (tmp_path / "claude" / "iEVO.md").read_bytes()
+    codex_first = (tmp_path / "codex" / "iEVO.md").read_bytes()
+
+    run_build(tmp_path, tag="v1.2.0")
+    claude_second = (tmp_path / "claude" / "iEVO.md").read_bytes()
+    codex_second = (tmp_path / "codex" / "iEVO.md").read_bytes()
+
+    assert claude_first == claude_second, "dist/claude/iEVO.md differs between runs"
+    assert codex_first == codex_second, "dist/codex/iEVO.md differs between runs"
+
+
 def test_render_template_provider_conditional(tmp_path: Path) -> None:
     """render_template() includes/excludes content based on provider conditional."""
     template_file = tmp_path / "kernel" / "test.md.j2"
