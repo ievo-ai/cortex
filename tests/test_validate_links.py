@@ -117,48 +117,109 @@ def test_valid_build_passes_lychee(tmp_path: Path) -> None:
 
 
 @_skip_if_no_lychee
-def test_broken_same_file_anchor_fails(tmp_path: Path) -> None:
-    """AC-2: A broken same-file anchor in dist/claude/iEVO.md causes lychee to exit non-zero."""
-    dist_dir = _build_dist(tmp_path)
+def test_broken_same_file_anchor_fails(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """AC-2: A broken same-file anchor in dist/claude/iEVO.md causes lychee to exit non-zero.
 
-    ievo_md = dist_dir / "claude" / "iEVO.md"
-    existing = ievo_md.read_text()
-    ievo_md.write_text(existing + "\n[broken](#nonexistent-heading-xyz-abc)\n")
+    Also asserts:
+    - lychee output mentions the broken anchor target
+    - no tarball is created (build aborts before create_tarball())
+    """
+    dist_dir = tmp_path / "dist"
 
-    with pytest.raises(SystemExit) as exc_info:
-        validate_links(dist_dir)
+    # Inject the broken link by patching build_claude_target to append it
+    original_build_claude = __import__("build", fromlist=["build_claude_target"]).build_claude_target
+
+    def patched_build_claude(claude_dir: Path, tag: str) -> None:
+        original_build_claude(claude_dir, tag)
+        ievo_md = claude_dir / "iEVO.md"
+        ievo_md.write_text(ievo_md.read_text() + "\n[broken](#nonexistent-heading-xyz-abc)\n")
+
+    with (
+        patch("build.build_claude_target", side_effect=patched_build_claude),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        build(tag="v1.0.0", dist_dir=dist_dir)
 
     assert exc_info.value.code != 0
+
+    captured = capsys.readouterr()
+    assert "nonexistent-heading-xyz-abc" in captured.err, (
+        f"Expected broken anchor in stderr, got: {captured.err!r}"
+    )
+
+    assert not list(dist_dir.glob("*.tar.gz")), (
+        "No tarball should be created when link validation fails"
+    )
 
 
 @_skip_if_no_lychee
-def test_missing_cross_file_target_fails(tmp_path: Path) -> None:
-    """AC-3: A link to a non-existent file in dist/ causes lychee to exit non-zero."""
-    dist_dir = _build_dist(tmp_path)
+def test_missing_cross_file_target_fails(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """AC-3: A link to a non-existent file in dist/ causes lychee to exit non-zero.
 
-    ievo_md = dist_dir / "claude" / "iEVO.md"
-    existing = ievo_md.read_text()
-    ievo_md.write_text(existing + "\n[missing](./totally-missing-file.md)\n")
+    Also asserts:
+    - lychee output mentions the missing file path
+    - no tarball is created (build aborts before create_tarball())
+    """
+    dist_dir = tmp_path / "dist"
 
-    with pytest.raises(SystemExit) as exc_info:
-        validate_links(dist_dir)
+    original_build_claude = __import__("build", fromlist=["build_claude_target"]).build_claude_target
+
+    def patched_build_claude(claude_dir: Path, tag: str) -> None:
+        original_build_claude(claude_dir, tag)
+        ievo_md = claude_dir / "iEVO.md"
+        ievo_md.write_text(ievo_md.read_text() + "\n[missing](./totally-missing-file.md)\n")
+
+    with (
+        patch("build.build_claude_target", side_effect=patched_build_claude),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        build(tag="v1.0.0", dist_dir=dist_dir)
 
     assert exc_info.value.code != 0
+
+    captured = capsys.readouterr()
+    assert "totally-missing-file" in captured.err, (
+        f"Expected missing file path in stderr, got: {captured.err!r}"
+    )
+
+    assert not list(dist_dir.glob("*.tar.gz")), (
+        "No tarball should be created when link validation fails"
+    )
 
 
 @_skip_if_no_lychee
-def test_broken_cross_file_anchor_fails(tmp_path: Path) -> None:
-    """AC-4: A broken cross-file anchor causes lychee to exit non-zero."""
-    dist_dir = _build_dist(tmp_path)
+def test_broken_cross_file_anchor_fails(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """AC-4: A broken cross-file anchor causes lychee to exit non-zero.
 
-    agent_md = dist_dir / "claude" / "agents" / "spec-writer.md"
-    existing = agent_md.read_text()
-    agent_md.write_text(existing + "\n[broken](../iEVO.md#no-such-section-xyz)\n")
+    Also asserts:
+    - lychee output mentions the broken anchor target
+    - no tarball is created (build aborts before create_tarball())
+    """
+    dist_dir = tmp_path / "dist"
 
-    with pytest.raises(SystemExit) as exc_info:
-        validate_links(dist_dir)
+    original_build_claude = __import__("build", fromlist=["build_claude_target"]).build_claude_target
+
+    def patched_build_claude(claude_dir: Path, tag: str) -> None:
+        original_build_claude(claude_dir, tag)
+        agent_md = claude_dir / "agents" / "spec-writer.md"
+        agent_md.write_text(agent_md.read_text() + "\n[broken](../iEVO.md#no-such-section-xyz)\n")
+
+    with (
+        patch("build.build_claude_target", side_effect=patched_build_claude),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        build(tag="v1.0.0", dist_dir=dist_dir)
 
     assert exc_info.value.code != 0
+
+    captured = capsys.readouterr()
+    assert "no-such-section-xyz" in captured.err, (
+        f"Expected broken anchor in stderr, got: {captured.err!r}"
+    )
+
+    assert not list(dist_dir.glob("*.tar.gz")), (
+        "No tarball should be created when link validation fails"
+    )
 
 
 @_skip_if_no_lychee
