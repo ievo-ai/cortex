@@ -17,10 +17,45 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 import tarfile
 from pathlib import Path
 
+import jinja2
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
 CORTEX_ROOT = Path(__file__).parent
+
+
+def render_template(template_path: Path, context: dict[str, str]) -> str:
+    """Render a Jinja2 template file with the given context variables.
+
+    Args:
+        template_path: Absolute path to the .j2 template file.
+        context: Variables to pass to the template.
+
+    Returns:
+        Rendered string content.
+
+    Raises:
+        FileNotFoundError: If the template file does not exist.
+        jinja2.UndefinedError: If the template references a variable not in context.
+    """
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template not found: {template_path}")
+
+    loader_root = template_path.parent.parent  # e.g. src/ when template is src/kernel/foo.j2
+    relative = template_path.relative_to(loader_root)
+
+    env = Environment(
+        loader=FileSystemLoader(str(loader_root)),
+        undefined=StrictUndefined,
+        keep_trailing_newline=True,
+        autoescape=False,
+    )
+    template = env.get_template(str(relative))
+    return template.render(**context)
+
 
 # Placeholder content for claude/ target (v1)
 CLAUDE_IEVO_MD = """\

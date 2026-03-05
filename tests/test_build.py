@@ -100,3 +100,57 @@ def test_build_uses_provided_tag(tmp_path: Path) -> None:
 
     tarball = tmp_path / "cortex-v2.3.4.tar.gz"
     assert tarball.exists(), f"Expected cortex-v2.3.4.tar.gz but found: {list(tmp_path.iterdir())}"
+
+
+# ---------------------------------------------------------------------------
+# Step 1: render_template helper unit tests
+# ---------------------------------------------------------------------------
+
+import jinja2  # noqa: E402 — imported here for test isolation clarity
+
+from build import render_template  # noqa: E402
+
+
+def test_render_template_substitutes_variables(tmp_path: Path) -> None:
+    """render_template() substitutes {{ cortex_version }} and {{ provider }} correctly."""
+    template_file = tmp_path / "kernel" / "test.md.j2"
+    template_file.parent.mkdir(parents=True)
+    template_file.write_text(
+        "Cortex {{ cortex_version }} — provider: {{ provider }}\n"
+    )
+
+    result = render_template(template_file, {"cortex_version": "v1.2.0", "provider": "claude"})
+
+    assert "v1.2.0" in result
+    assert "claude" in result
+    assert "{{" not in result
+
+
+def test_render_template_strict_undefined_raises(tmp_path: Path) -> None:
+    """render_template() raises jinja2.UndefinedError for unknown variables."""
+    template_file = tmp_path / "kernel" / "test.md.j2"
+    template_file.parent.mkdir(parents=True)
+    template_file.write_text("Version: {{ undefined_var }}\n")
+
+    import pytest
+
+    with pytest.raises(jinja2.UndefinedError):
+        render_template(template_file, {"cortex_version": "v1.0.0", "provider": "claude"})
+
+
+def test_render_template_provider_conditional(tmp_path: Path) -> None:
+    """render_template() includes/excludes content based on provider conditional."""
+    template_file = tmp_path / "kernel" / "test.md.j2"
+    template_file.parent.mkdir(parents=True)
+    template_file.write_text(
+        "{% if provider == \"claude\" %}CLAUDE_ONLY{% endif %}\n"
+        "{% if provider == \"codex\" %}CODEX_ONLY{% endif %}\n"
+    )
+
+    claude_result = render_template(template_file, {"cortex_version": "v1.0.0", "provider": "claude"})
+    codex_result = render_template(template_file, {"cortex_version": "v1.0.0", "provider": "codex"})
+
+    assert "CLAUDE_ONLY" in claude_result
+    assert "CODEX_ONLY" not in claude_result
+    assert "CODEX_ONLY" in codex_result
+    assert "CLAUDE_ONLY" not in codex_result
