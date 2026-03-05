@@ -45,9 +45,12 @@ Each GitHub Release includes `cortex-<tag>.tar.gz` containing:
 
 ```
 cortex-<tag>.tar.gz
-├── iEVO.md             # Rendered from src/kernel/iEVO.md.j2
-└── agents/
-    └── *.md
+├── iEVO.md             # Rendered from src/kernel/iEVO.md.j2 (provider-agnostic)
+├── claude/             # Claude Code provider artifacts
+│   └── agents/
+│       └── *.md        # Agent templates rendered for Claude Code
+└── codex/              # OpenAI Codex provider artifacts
+    └── BUILD_TARGET.md # Placeholder — full templates in future REQs
 ```
 
 ## Building locally
