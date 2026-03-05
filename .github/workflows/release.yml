@@ -28,6 +28,17 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: python build.py --tag "$TAG" --dist ./dist
 
+      - name: Install lychee
+        env:
+          LYCHEE_VERSION: "0.23.0"
+        run: |
+          curl -sSfL "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/lychee-x86_64-unknown-linux-gnu.tar.gz" | tar xz
+          sudo mv lychee /usr/local/bin/
+          lychee --version
+
+      - name: Validate Markdown links
+        run: lychee --offline --include-fragments --no-progress dist/
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

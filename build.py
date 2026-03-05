@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import subprocess
 import sys
 import tarfile
 from pathlib import Path
@@ -28,7 +29,9 @@ CORTEX_ROOT = Path(__file__).parent
 IEVO_MD_TEMPLATE = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
 
 
-def render_template(template_path: Path, context: dict[str, str], loader_root: Path | None = None) -> str:
+def render_template(
+    template_path: Path, context: dict[str, str], loader_root: Path | None = None
+) -> str:
     """Render a Jinja2 template file with the given context variables.
 
     Args:
@@ -89,11 +92,55 @@ See: https://github.com/ievo-ai/cortex/issues (IDEA-005)
 """
 
 
+def validate_links(dist_dir: Path) -> None:
+    """Validate Markdown links in dist_dir using lychee.
+
+    Runs lychee with --offline (skip external URLs), --include-fragments (anchor
+    checking — mandatory for AC-2 and AC-4), and --no-progress (CI-friendly output).
+
+    If lychee is not on PATH, prints a warning to stderr and returns without error —
+    allowing local development without lychee installed. CI is the authoritative gate.
+
+    If lychee exits non-zero (exit 2 = broken links, exit 1 = runtime error), prints
+    lychee's output and calls sys.exit() with the same return code.
+
+    # TODO(IDEA-011): orphaned anchor detection — headings never referenced
+
+    Args:
+        dist_dir: Path to the rendered output directory (e.g. dist/).
+    """
+    lychee_bin = shutil.which("lychee")
+    if lychee_bin is None:
+        print(
+            "Warning: lychee not found on PATH — skipping link validation. "
+            "Install lychee to validate Markdown links locally.",
+            file=sys.stderr,
+        )
+        return
+
+    result = subprocess.run(
+        ["lychee", "--offline", "--include-fragments", "--no-progress", str(dist_dir)],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        if result.stdout:
+            print(result.stdout, file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        sys.exit(result.returncode)
+
+
 def build_claude_target(claude_dir: Path, tag: str) -> None:
     """Render claude/ provider artifacts."""
     claude_dir.mkdir(parents=True, exist_ok=True)
 
-    rendered = render_template(IEVO_MD_TEMPLATE, {"cortex_version": tag, "provider": "claude"}, CORTEX_ROOT / "src")
+    rendered = render_template(
+        IEVO_MD_TEMPLATE,
+        {"cortex_version": tag, "provider": "claude"},
+        CORTEX_ROOT / "src",
+    )
     (claude_dir / "iEVO.md").write_text(rendered)
 
     agents_dir = claude_dir / "agents"
@@ -105,7 +152,11 @@ def build_codex_target(codex_dir: Path, tag: str) -> None:
     """Render codex/ provider artifacts."""
     codex_dir.mkdir(parents=True, exist_ok=True)
 
-    rendered = render_template(IEVO_MD_TEMPLATE, {"cortex_version": tag, "provider": "codex"}, CORTEX_ROOT / "src")
+    rendered = render_template(
+        IEVO_MD_TEMPLATE,
+        {"cortex_version": tag, "provider": "codex"},
+        CORTEX_ROOT / "src",
+    )
     (codex_dir / "iEVO.md").write_text(rendered)
 
     (codex_dir / "BUILD_TARGET.md").write_text(CODEX_BUILD_TARGET_MD)
@@ -142,6 +193,7 @@ def build(tag: str, dist_dir: Path) -> Path:
 
     build_claude_target(dist_dir / "claude", tag)
     build_codex_target(dist_dir / "codex", tag)
+    validate_links(dist_dir)
 
     return create_tarball(dist_dir, tag)
 
