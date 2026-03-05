@@ -25,14 +25,17 @@ import jinja2
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 CORTEX_ROOT = Path(__file__).parent
+IEVO_MD_TEMPLATE = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
 
 
-def render_template(template_path: Path, context: dict[str, str]) -> str:
+def render_template(template_path: Path, context: dict[str, str], loader_root: Path | None = None) -> str:
     """Render a Jinja2 template file with the given context variables.
 
     Args:
         template_path: Absolute path to the .j2 template file.
         context: Variables to pass to the template.
+        loader_root: Root directory for the Jinja2 FileSystemLoader. Defaults to
+            ``template_path.parent.parent`` when not provided.
 
     Returns:
         Rendered string content.
@@ -44,7 +47,8 @@ def render_template(template_path: Path, context: dict[str, str]) -> str:
     if not template_path.exists():
         raise FileNotFoundError(f"Template not found: {template_path}")
 
-    loader_root = template_path.parent.parent  # e.g. src/ when template is src/kernel/foo.j2
+    if loader_root is None:
+        loader_root = template_path.parent.parent
     relative = template_path.relative_to(loader_root)
 
     env = Environment(
@@ -89,8 +93,7 @@ def build_claude_target(claude_dir: Path, tag: str) -> None:
     """Render claude/ provider artifacts."""
     claude_dir.mkdir(parents=True, exist_ok=True)
 
-    ievo_md_j2 = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
-    rendered = render_template(ievo_md_j2, {"cortex_version": tag, "provider": "claude"})
+    rendered = render_template(IEVO_MD_TEMPLATE, {"cortex_version": tag, "provider": "claude"}, CORTEX_ROOT / "src")
     (claude_dir / "iEVO.md").write_text(rendered)
 
     agents_dir = claude_dir / "agents"
@@ -102,8 +105,7 @@ def build_codex_target(codex_dir: Path, tag: str) -> None:
     """Render codex/ provider artifacts."""
     codex_dir.mkdir(parents=True, exist_ok=True)
 
-    ievo_md_j2 = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
-    rendered = render_template(ievo_md_j2, {"cortex_version": tag, "provider": "codex"})
+    rendered = render_template(IEVO_MD_TEMPLATE, {"cortex_version": tag, "provider": "codex"}, CORTEX_ROOT / "src")
     (codex_dir / "iEVO.md").write_text(rendered)
 
     (codex_dir / "BUILD_TARGET.md").write_text(CODEX_BUILD_TARGET_MD)

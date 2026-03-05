@@ -5,10 +5,17 @@ TDD: tests written before build.py is implemented.
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
 import tarfile
 from pathlib import Path
+
+import jinja2
+import pytest
+
+from build import render_template
 
 
 CORTEX_ROOT = Path(__file__).parent.parent
@@ -106,11 +113,6 @@ def test_build_uses_provided_tag(tmp_path: Path) -> None:
 # Step 1: render_template helper unit tests
 # ---------------------------------------------------------------------------
 
-import jinja2  # noqa: E402 — imported here for test isolation clarity
-
-from build import render_template  # noqa: E402
-
-
 def test_render_template_substitutes_variables(tmp_path: Path) -> None:
     """render_template() substitutes {{ cortex_version }} and {{ provider }} correctly."""
     template_file = tmp_path / "kernel" / "test.md.j2"
@@ -131,8 +133,6 @@ def test_render_template_strict_undefined_raises(tmp_path: Path) -> None:
     template_file = tmp_path / "kernel" / "test.md.j2"
     template_file.parent.mkdir(parents=True)
     template_file.write_text("Version: {{ undefined_var }}\n")
-
-    import pytest
 
     with pytest.raises(jinja2.UndefinedError):
         render_template(template_file, {"cortex_version": "v1.0.0", "provider": "claude"})
@@ -226,9 +226,6 @@ def test_build_provider_specific_content_codex_only(tmp_path: Path) -> None:
 
 def test_build_fails_on_missing_template(tmp_path: Path) -> None:
     """build.py exits non-zero and mentions iEVO.md.j2 when template is missing."""
-    import os
-    import shutil
-
     # Copy cortex source to a temp dir so we can remove the template
     build_dir = tmp_path / "cortex_src"
     shutil.copytree(CORTEX_ROOT, build_dir, ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"))
@@ -254,9 +251,6 @@ def test_build_fails_on_missing_template(tmp_path: Path) -> None:
 
 def test_build_fails_on_undefined_variable(tmp_path: Path) -> None:
     """build.py exits non-zero and mentions the undefined var when template has unknown var."""
-    import os
-    import shutil
-
     # Copy cortex source to a temp dir so we can inject a bad template
     build_dir = tmp_path / "cortex_src"
     shutil.copytree(CORTEX_ROOT, build_dir, ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"))
