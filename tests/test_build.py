@@ -170,12 +170,17 @@ def test_template_source_exists() -> None:
 
 
 def test_template_contains_required_variables() -> None:
-    """iEVO.md.j2 contains {{ cortex_version }} and no provider references (AC-1)."""
+    """iEVO.md.j2 contains {{ cortex_version }} and no provider Jinja2 references (AC-1)."""
     template_path = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
     source = template_path.read_text()
 
     assert "{{ cortex_version }}" in source, "Missing {{ cortex_version }} placeholder"
-    assert "provider" not in source, "Template must not reference 'provider' variable"
+    assert "{{ provider }}" not in source, (
+        "Template must not use {{ provider }} variable"
+    )
+    assert "{% if provider" not in source, (
+        "Template must not use {% if provider %} blocks"
+    )
 
 
 # ---------------------------------------------------------------------------

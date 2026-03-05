@@ -3,13 +3,17 @@
 Usage:
     python build.py --tag v1.0.0 [--dist ./dist]
 
+iEVO.md is rendered ONCE (provider-agnostic) → dist/iEVO.md.
 For each provider target (claude, codex):
-    - Renders provider-specific output files from src/
+    - Renders provider-specific artifacts from src/
     - Writes to dist/<provider>/
-    - Creates dist/cortex-<tag>.tar.gz containing both provider directories
+    - Creates dist/cortex-<tag>.tar.gz with iEVO.md at root + provider directories
+
+BREAKING CHANGE (REQ-004): iEVO.md moved from dist/<provider>/iEVO.md to dist/iEVO.md.
 
 v1 placeholder behavior:
-    - claude/: iEVO.md (kernel) + one placeholder agent .md
+    - dist/iEVO.md: kernel (provider-agnostic)
+    - claude/: one placeholder agent .md
     - codex/: BUILD_TARGET.md (format TBD per IDEA-005)
 """
 
@@ -132,16 +136,19 @@ def validate_links(dist_dir: Path) -> None:
         sys.exit(result.returncode)
 
 
+def render_ievo_md(dist_dir: Path, tag: str) -> None:
+    """Render iEVO.md once (provider-agnostic) → dist_dir/iEVO.md."""
+    rendered = render_template(
+        IEVO_MD_TEMPLATE,
+        {"cortex_version": tag},
+        CORTEX_ROOT / "src",
+    )
+    (dist_dir / "iEVO.md").write_text(rendered)
+
+
 def build_claude_target(claude_dir: Path, tag: str) -> None:
     """Render claude/ provider artifacts."""
     claude_dir.mkdir(parents=True, exist_ok=True)
-
-    rendered = render_template(
-        IEVO_MD_TEMPLATE,
-        {"cortex_version": tag, "provider": "claude"},
-        CORTEX_ROOT / "src",
-    )
-    (claude_dir / "iEVO.md").write_text(rendered)
 
     agents_dir = claude_dir / "agents"
     agents_dir.mkdir(exist_ok=True)
@@ -152,21 +159,20 @@ def build_codex_target(codex_dir: Path, tag: str) -> None:
     """Render codex/ provider artifacts."""
     codex_dir.mkdir(parents=True, exist_ok=True)
 
-    rendered = render_template(
-        IEVO_MD_TEMPLATE,
-        {"cortex_version": tag, "provider": "codex"},
-        CORTEX_ROOT / "src",
-    )
-    (codex_dir / "iEVO.md").write_text(rendered)
-
     (codex_dir / "BUILD_TARGET.md").write_text(CODEX_BUILD_TARGET_MD)
 
 
 def create_tarball(dist_dir: Path, tag: str) -> Path:
-    """Create cortex-<tag>.tar.gz containing claude/ and codex/ from dist_dir."""
+    """Create cortex-<tag>.tar.gz with iEVO.md at root + provider directories."""
     tarball_path = dist_dir / f"cortex-{tag}.tar.gz"
 
     with tarfile.open(tarball_path, "w:gz") as tf:
+        # Add iEVO.md at tarball root (provider-agnostic)
+        ievo_md = dist_dir / "iEVO.md"
+        if ievo_md.exists():
+            tf.add(ievo_md, arcname="iEVO.md")
+
+        # Add provider-specific directories
         for provider in ("claude", "codex"):
             provider_dir = dist_dir / provider
             if provider_dir.exists():
@@ -193,6 +199,10 @@ def build(tag: str, dist_dir: Path) -> Path:
 
     build_claude_target(dist_dir / "claude", tag)
     build_codex_target(dist_dir / "codex", tag)
+
+    # Render iEVO.md once — provider-agnostic (REQ-004)
+    render_ievo_md(dist_dir, tag)
+
     validate_links(dist_dir)
 
     return create_tarball(dist_dir, tag)
