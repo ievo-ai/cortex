@@ -8,6 +8,8 @@ Cortex stores the iEvo kernel as Jinja2-templated source and builds provider-spe
 artifacts at release time. The iEvo CLI downloads the latest Cortex release asset
 via HTTPS during `ievo init`.
 
+For detailed architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Structure
 
 ```
