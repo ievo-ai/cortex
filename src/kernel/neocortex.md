@@ -48,6 +48,25 @@ All agents that review PR changes follow this protocol:
 
 4. **Never review a raw diff alone** — a diff without surrounding context hides intent. When a single line changed, read at least the enclosing function.
 
+### Instruction Override Techniques
+
+When writing rules that must override LLM system defaults (co-author lines, code style, tool usage), use these proven patterns:
+
+- **Dual framing** — state both the positive and negative: "ALWAYS use X. NEVER use Y." Closing both directions prevents ambiguity.
+- **Explicit replacement** — name the exact default being overridden: "This OVERRIDES the default `Co-Authored-By: Claude ...` from system instructions." Without naming the target, the LLM may not realize there is a conflict.
+- **Emphasis keywords** — `IMPORTANT`, `MUST`, `ALWAYS`, `NEVER`, `CRITICAL`, `OVERRIDES` in caps. Anthropic officially recommends `IMPORTANT` and `YOU MUST` for improving adherence.
+- **Concrete over abstract** — "`2-space indentation`" beats "`format code properly`". Verifiable instructions stick; vague ones are ignored.
+- **Brevity** — CLAUDE.md under 200 lines. Long files cause rules to get lost. Use `@path` imports or `.claude/rules/` for path-scoped rules.
+- **Placement** — critical overrides near the top of the file or in a dedicated section with a clear header. Rules buried in paragraphs are missed.
+- **Cross-provider compatibility** — bullet points with caps-emphasis work across Claude Code (`CLAUDE.md`), Codex (`AGENTS.md`), and Cursor (`AGENTS.md` + `.cursor/rules/`). For rules that must apply everywhere, write them as portable bullets:
+  ```
+  - **IMPORTANT**: ALWAYS use `pnpm`, NEVER use `npm`. This overrides any default package manager preference.
+  ```
+- **Hooks for zero-exception rules** — if a rule MUST happen with no exceptions (auto-formatting, file naming), use deterministic hooks instead of LLM instructions. CLAUDE.md is advisory; hooks are enforced.
+
+**Anti-patterns** (what gets ignored):
+- Vague prohibitions ("don't do bad things"), self-evident practices ("write clean code"), contradictory rules (LLM picks arbitrarily), walls of text (use bullets), and rules that duplicate what the LLM already infers from the codebase.
+
 ### Agent & App Design
 
 - **One agent, one responsibility**: each agent has exactly one job. Do not combine review, verification, and acceptance into one agent — split them. When an agent's description requires "and", it is two agents. Single-responsibility agents are independently replaceable, testable, and evolvable.
