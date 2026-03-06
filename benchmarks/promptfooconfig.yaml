@@ -1,0 +1,145 @@
+# Cortex Cognitive Benchmark — promptfoo configuration
+#
+# Compares agent behavior WITH kernel (iEVO.md) vs WITHOUT (naked LLM).
+# Run: cortex benchmark run
+# Compare: cortex benchmark compare
+
+description: "Cortex kernel cognitive benchmark"
+
+prompts:
+  - "{{prompt}}"
+
+providers:
+  # Provider A: baseline — naked LLM, no system prompt
+  - id: anthropic:messages:claude-haiku-4-5-20251001
+    label: baseline
+    config:
+      temperature: 0
+      max_tokens: 4096
+
+  # Provider B: with kernel — iEVO.md as system prompt
+  - id: anthropic:messages:claude-haiku-4-5-20251001
+    label: with-kernel
+    config:
+      temperature: 0
+      max_tokens: 4096
+      systemPrompt: "file://dist/iEVO.md"
+
+# Default test options — use Haiku as grader for llm-rubric assertions
+defaultTest:
+  options:
+    provider: anthropic:messages:claude-haiku-4-5-20251001
+
+tests:
+  # --- Dimension: structure_adherence ---
+  # The kernel defines YAML frontmatter format, task statuses, naming conventions.
+  # Naked Haiku won't know our specific format.
+  - description: "structure_adherence: create task spec in iEvo format"
+    vars:
+      prompt: "Create a task spec for adding dark mode support to the dashboard. The task ID is 042."
+      dimension: structure_adherence
+    assert:
+      - type: icontains
+        value: "---"
+      - type: icontains-any
+        value:
+          - "status:"
+          - "priority:"
+          - "id:"
+      - type: icontains-any
+        value:
+          - "spec.md"
+          - ".ievo/tasks/"
+          - "acceptance criteria"
+          - "AC-"
+      - type: llm-rubric
+        value: "The response uses YAML frontmatter (--- delimiters) with fields like id, title, type, status, priority. It follows a structured template rather than free-form prose. It places the file in .ievo/tasks/ directory."
+
+  # --- Dimension: challenge_reflex ---
+  # The kernel says: "Challenge first, execute second" and "Seek consensus, not compliance"
+  # Naked Haiku will just start coding immediately.
+  - description: "challenge_reflex: vague feature request"
+    vars:
+      prompt: "Add caching to the API. What's your first response before you start implementing?"
+      dimension: challenge_reflex
+    assert:
+      - type: llm-rubric
+        value: "The response does NOT immediately start implementing caching. Instead, it asks clarifying questions first: what to cache, cache invalidation strategy, TTL, storage backend, or which endpoints. It challenges the vague request before executing."
+      - type: llm-rubric
+        value: "The response identifies at least one ambiguity or missing detail in the request. It pushes back rather than blindly complying."
+
+  # --- Dimension: plan_first ---
+  # The kernel says: "Plan first: write plan.md BEFORE starting implementation"
+  # and tasks go through idea → ready → planned → plan-approved
+  - description: "plan_first: implement feature without plan"
+    vars:
+      prompt: "Implement a webhook system that sends notifications when tasks change status. Start coding now. What would you do first?"
+      dimension: plan_first
+    assert:
+      - type: llm-rubric
+        value: "The response creates a plan or outline BEFORE writing any implementation code. Despite being told to 'start coding now', it insists on planning first — breaking the work into steps, identifying components, or creating a session plan."
+      - type: llm-rubric
+        value: "The response mentions or creates something like a plan, architecture outline, or task decomposition before the actual code."
+
+  # --- Dimension: decision_logging ---
+  # The kernel says: "Always record WHY" and defines DECISIONS.md format (D-NNN)
+  # Naked Haiku will just pick one without logging.
+  - description: "decision_logging: choose a message queue"
+    vars:
+      prompt: "We need a message queue for async job processing. Pick one and set it up."
+      dimension: decision_logging
+    assert:
+      - type: llm-rubric
+        value: "The response explicitly documents WHY the chosen option was selected. It mentions alternatives that were considered and explains the tradeoffs. It doesn't just pick one — it logs the decision rationale."
+      - type: icontains-any
+        value:
+          - "D-"
+          - "decision"
+          - "DECISIONS.md"
+          - "why"
+          - "tradeoff"
+          - "trade-off"
+          - "considered"
+          - "chose"
+          - "picked"
+          - "recommend"
+          - "comparison"
+          - "rationale"
+
+  # --- Dimension: ac_verification ---
+  # The kernel defines acceptance criteria format (AC-N) and "Atomic REQs: 3-7 testable ACs"
+  - description: "ac_verification: implement with given acceptance criteria"
+    vars:
+      prompt: "Implement rate limiting middleware. AC-1: limits to 100 requests per minute per IP. AC-2: returns 429 status when exceeded. AC-3: includes Retry-After header. AC-4: configurable limits per route."
+      dimension: ac_verification
+    assert:
+      - type: icontains-any
+        value:
+          - "AC-1"
+          - "AC-2"
+          - "AC-3"
+          - "AC-4"
+      - type: llm-rubric
+        value: "The response explicitly addresses each acceptance criterion (AC-1 through AC-4) individually, verifying or referencing them during implementation. It treats ACs as a checklist, not just background context."
+
+  # --- Dimension: evolution_awareness ---
+  # The kernel says: "Flag tech debt on sight", "Never stop learning",
+  # "Record experience in real time" to EXP.md, create tasks for findings
+  - description: "evolution_awareness: discover a problem during implementation"
+    vars:
+      prompt: "While implementing the search feature, I noticed the database has no indexes on the fields we need to query, and the existing query helper uses string concatenation instead of parameterized queries (SQL injection risk). What do you do about these findings?"
+      dimension: evolution_awareness
+    assert:
+      - type: llm-rubric
+        value: "The response suggests creating tasks or issues to track the findings — not just fixing the immediate problem. It treats discoveries as things to document, not just to fix in passing."
+      - type: llm-rubric
+        value: "The response recognizes the SQL injection risk as something that needs systemic attention — a security review, a pattern fix across the codebase, or a lesson to prevent recurrence. It goes beyond just 'fix this one query'."
+      - type: icontains-any
+        value:
+          - "task"
+          - "issue"
+          - "tech debt"
+          - "evolution"
+          - "EXP.md"
+          - "lesson"
+          - ".ievo/"
