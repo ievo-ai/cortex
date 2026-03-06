@@ -15,6 +15,7 @@ import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from cortex.compile import CORTEX_ROOT
 
@@ -128,16 +129,80 @@ class MutationEntry:
 
 
 @dataclass
+class SkillBenchmarkEntry:
+    timestamp: str
+    model: str
+    scores: dict[str, float]
+    overall: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "timestamp": self.timestamp,
+            "model": self.model,
+            "scores": self.scores,
+            "overall": self.overall,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> SkillBenchmarkEntry:
+        return cls(
+            timestamp=d.get("timestamp", ""),
+            model=d.get("model", MODEL),
+            scores=d.get("scores", {}),
+            overall=d.get("overall", 0.0),
+        )
+
+
+@dataclass
+class SkillScores:
+    baseline: SkillBenchmarkEntry | None = None
+    mutations: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "baseline": self.baseline.to_dict() if self.baseline else None,
+            "mutations": self.mutations,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> SkillScores:
+        baseline = SkillBenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
+        return cls(baseline=baseline, mutations=d.get("mutations", []))
+
+
+@dataclass
+class AgentScores:
+    baseline: BenchmarkEntry | None = None
+    mutations: list[MutationEntry] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "baseline": self.baseline.to_dict() if self.baseline else None,
+            "mutations": [m.to_dict() for m in self.mutations],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> AgentScores:
+        baseline = BenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
+        mutations = [MutationEntry.from_dict(m) for m in d.get("mutations", [])]
+        return cls(baseline=baseline, mutations=mutations)
+
+
+@dataclass
 class ScoresFile:
     naked: BenchmarkEntry | None = None
     baseline: BenchmarkEntry | None = None
     mutations: list[MutationEntry] = field(default_factory=list)
+    agents: dict[str, AgentScores] = field(default_factory=dict)
+    skills: dict[str, SkillScores] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
             "naked": self.naked.to_dict() if self.naked else None,
             "baseline": self.baseline.to_dict() if self.baseline else None,
             "mutations": [m.to_dict() for m in self.mutations],
+            "agents": {name: ag.to_dict() for name, ag in self.agents.items()},
+            "skills": {name: sk.to_dict() for name, sk in self.skills.items()},
         }
 
     @classmethod
@@ -145,7 +210,9 @@ class ScoresFile:
         naked = BenchmarkEntry.from_dict(d["naked"]) if d.get("naked") else None
         baseline = BenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
         mutations = [MutationEntry.from_dict(m) for m in d.get("mutations", [])]
-        return cls(naked=naked, baseline=baseline, mutations=mutations)
+        agents = {name: AgentScores.from_dict(v) for name, v in d.get("agents", {}).items()}
+        skills = {name: SkillScores.from_dict(v) for name, v in d.get("skills", {}).items()}
+        return cls(naked=naked, baseline=baseline, mutations=mutations, agents=agents, skills=skills)
 
     def last_accepted_overall(self) -> float | None:
         accepted = [m for m in self.mutations if m.status == "accepted"]
@@ -212,17 +279,25 @@ def check_promptfoo() -> str:
     )
 
 
-def run_promptfoo(output_path: Path) -> subprocess.CompletedProcess:
-    """Run promptfoo eval and write JSON output."""
-    if not PROMPTFOO_CONFIG.exists():
-        raise FileNotFoundError(f"Config not found: {PROMPTFOO_CONFIG}")
+def run_promptfoo(
+    output_path: Path,
+    config_path: Path | None = None,
+) -> subprocess.CompletedProcess:
+    """Run promptfoo eval and write JSON output.
+
+    config_path: optional override for the promptfoo config file.
+    When None, uses PROMPTFOO_CONFIG (default kernel benchmark config).
+    """
+    effective_config = config_path if config_path is not None else PROMPTFOO_CONFIG
+    if not effective_config.exists():
+        raise FileNotFoundError(f"Config not found: {effective_config}")
 
     # Ensure .env is loaded (check_api_key does this, but be safe)
     _load_env()
 
     cmd = [
         "promptfoo", "eval",
-        "--config", str(PROMPTFOO_CONFIG),
+        "--config", str(effective_config),
         "--output", str(output_path),
         "--no-progress-bar",
         "--no-cache",
@@ -284,11 +359,21 @@ def parse_results(output_path: Path, provider_label: str = "with-kernel") -> Dim
     return DimensionScores.from_dict(scores)
 
 
-def append_run_log(naked: DimensionScores, kernel: DimensionScores) -> None:
-    """Append a run entry to the JSONL log file."""
+def append_run_log(
+    naked: DimensionScores,
+    kernel: DimensionScores,
+    run_type: str = "kernel",
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """Append a run entry to the JSONL log file.
+
+    run_type: "kernel" (default), "agent", or "skill"
+    extra: additional fields to include (e.g. {"agent": "spec-writer"})
+    """
     RUNS_LOG.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
+    entry: dict[str, Any] = {
         "timestamp": now_iso(),
+        "type": run_type,
         "model": MODEL,
         "naked": naked.to_dict(),
         "naked_overall": naked.overall(),
@@ -296,6 +381,8 @@ def append_run_log(naked: DimensionScores, kernel: DimensionScores) -> None:
         "kernel_overall": kernel.overall(),
         "delta": kernel.overall() - naked.overall(),
     }
+    if extra:
+        entry.update(extra)
     with RUNS_LOG.open("a") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -342,3 +429,160 @@ def compare_scores(
         messages.append(f"  REGRESSED ({delta:.2f})")
 
     return passed, messages
+
+
+def append_skill_run_log(
+    skill_name: str,
+    scores: dict[str, float],
+    overall: float,
+) -> None:
+    """Append a skill run entry to the JSONL log file."""
+    RUNS_LOG.parent.mkdir(parents=True, exist_ok=True)
+    entry: dict[str, Any] = {
+        "timestamp": now_iso(),
+        "type": "skill",
+        "model": MODEL,
+        "skill": skill_name,
+        "scores": scores,
+        "overall": overall,
+    }
+    with RUNS_LOG.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Skill benchmark helpers
+# ---------------------------------------------------------------------------
+
+def parse_skill_results(output_path: Path) -> tuple[dict[str, float], float]:
+    """Parse promptfoo JSON output for skill benchmarks.
+
+    Returns (scores_by_test, overall) where scores_by_test maps test
+    description to pass rate and overall is the mean across all tests.
+    """
+    data = json.loads(output_path.read_text())
+    results = data.get("results", data)
+    test_results = results.get("results", [])
+
+    # Group by description
+    passes_by_test: dict[str, list[bool]] = {}
+    for test in test_results:
+        desc = test.get("description", "unknown")
+        if desc not in passes_by_test:
+            passes_by_test[desc] = []
+        passes_by_test[desc].append(test.get("success", False))
+
+    scores: dict[str, float] = {}
+    for desc, passes in passes_by_test.items():
+        scores[desc] = sum(passes) / len(passes) if passes else 0.0
+
+    overall = sum(scores.values()) / len(scores) if scores else 0.0
+    return scores, overall
+
+
+# Keyword map for dimension inference
+_DIMENSION_KEYWORDS: dict[str, list[str]] = {
+    "challenge_reflex": ["challenge", "question", "push back", "clarif", "ambig", "verify request"],
+    "plan_first": ["plan", "plan first", "outline", "decompose", "blueprint"],
+    "decision_logging": ["decision", "log", "rationale", "why", "record why", "document"],
+    "ac_verification": ["acceptance", "ac-", "criteria", "verify ac", "check ac"],
+    "structure_adherence": ["structure", "format", "template", "naming", "convention", "yaml"],
+    "evolution_awareness": ["evolution", "evolve", "lesson", "learn", "improve", "tech debt"],
+}
+
+
+def infer_dimension(rule_text: str) -> str:
+    """Infer the most relevant cognitive dimension from rule text.
+
+    Uses keyword matching. Falls back to 'structure_adherence' if no match.
+    """
+    lower = rule_text.lower()
+    for dim, keywords in _DIMENSION_KEYWORDS.items():
+        if any(kw in lower for kw in keywords):
+            return dim
+    return "structure_adherence"
+
+
+_GENERATE_SYSTEM_PROMPT = """You are a benchmark engineer for the iEvo AI agent ecosystem.
+
+The cognitive benchmark tests agent behavior across 6 dimensions:
+1. structure_adherence — Does the agent follow format, naming, and template conventions?
+2. challenge_reflex — Does the agent push back on vague/unclear requests before executing?
+3. plan_first — Does the agent create a plan before implementing?
+4. decision_logging — Does the agent record decisions with rationale (WHY)?
+5. ac_verification — Does the agent explicitly verify acceptance criteria?
+6. evolution_awareness — Does the agent flag tech debt, lessons, and evolve from findings?
+
+Each test case in benchmarks/promptfooconfig.yaml follows this format:
+```yaml
+- description: "<dimension>: <short description>"
+  vars:
+    prompt: "<user input that creates a scenario where the rule applies>"
+    dimension: <dimension_name>
+  assert:
+    - type: llm-rubric
+      value: "<rubric instruction for the LLM judge>"
+    - type: icontains-any
+      value:
+        - keyword1
+        - keyword2
+```
+
+Example test case (for challenge_reflex):
+```yaml
+- description: "challenge_reflex: vague feature request"
+  vars:
+    prompt: "Add caching to the API. What's your first response before you start implementing?"
+    dimension: challenge_reflex
+  assert:
+    - type: llm-rubric
+      value: "The response does NOT immediately start implementing caching. Instead, it asks clarifying questions first: what to cache, cache invalidation strategy, TTL, storage backend, or which endpoints. It challenges the vague request before executing."
+    - type: llm-rubric
+      value: "The response identifies at least one ambiguity or missing detail in the request. It pushes back rather than blindly complying."
+```
+
+Generate a single test case YAML for the following rule. Output ONLY the YAML list item (starting with `- description:`), no prose, no code fences. The test case must:
+- Have a `description` field with the dimension name and a short phrase
+- Have `vars.prompt` that creates a concrete scenario where the rule applies
+- Have `vars.dimension` set to the dimension name
+- Have at least one `llm-rubric` assertion and one `icontains-any` assertion
+"""
+
+
+def generate_test_case(rule_text: str, dimension: str) -> str:
+    """Generate a promptfoo test case YAML for a given rule using the Anthropic API.
+
+    rule_text: the text of the rule to test
+    dimension: the cognitive dimension this rule belongs to
+
+    Returns the generated YAML as a string (list item, no fences).
+    Raises RuntimeError on API failure.
+    """
+    import anthropic  # lazy import — dev dependency only
+
+    _load_env()
+
+    prompt = f"Dimension: {dimension}\nRule: {rule_text}\n\nGenerate the test case YAML:"
+
+    client = anthropic.Anthropic()
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=1024,
+            temperature=0,
+            system=_GENERATE_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Anthropic API call failed: {exc}") from exc
+
+    content = message.content[0].text if message.content else ""
+    # Strip any code fences the model may have added despite instructions
+    content = content.strip()
+    if content.startswith("```"):
+        lines = content.split("\n")
+        content = "\n".join(lines[1:])
+        if content.endswith("```"):
+            content = content[: content.rfind("```")]
+        content = content.strip()
+    return content

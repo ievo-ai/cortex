@@ -14,7 +14,7 @@ dependencies = ["pyyaml", "jinja2>=3.1", "typer>=0.15.0"]
 cortex = "cortex.cli:app"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy", "pytest-cov", "watchfiles>=1.0.0", "promptfoo"]
+dev = ["pytest", "ruff", "mypy", "pytest-cov", "watchfiles>=1.0.0", "promptfoo", "anthropic"]
 
 [tool.uv]
 package = true
