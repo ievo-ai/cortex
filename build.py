@@ -16,6 +16,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import jinja2  # noqa: F401 (re-export for backward compat)
+
 from cortex.compile import (  # noqa: F401 (re-export for backward compat)
     CLAUDE_AGENT_MD,
     CODEX_BUILD_TARGET_MD,
@@ -30,7 +32,8 @@ from cortex.compile import (  # noqa: F401 (re-export for backward compat)
     validate_links,
 )
 
-import jinja2
+
+
 
 
 def main() -> None:
