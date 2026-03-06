@@ -218,6 +218,7 @@ def run_promptfoo(output_path: Path) -> subprocess.CompletedProcess:
         "--config", str(PROMPTFOO_CONFIG),
         "--output", str(output_path),
         "--no-progress-bar",
+        "--no-cache",
     ]
 
     # If promptfoo is not directly on PATH, use uv run
