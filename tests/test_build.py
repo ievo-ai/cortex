@@ -192,7 +192,6 @@ def test_build_no_provider_ievo_md_in_subdirs(tmp_path: Path) -> None:
 
 def test_build_fails_on_missing_template(tmp_path: Path) -> None:
     """build() raises FileNotFoundError when the template file is missing."""
-    from cortex.compile import IEVO_MD_TEMPLATE
 
     # Temporarily point IEVO_MD_TEMPLATE to a non-existent path
     fake_template = tmp_path / "nonexistent" / "iEVO.md.j2"
@@ -235,7 +234,7 @@ def test_build_idempotent_rendered_content(tmp_path: Path) -> None:
 
 
 def test_build_ievo_render_context_has_no_provider(tmp_path: Path) -> None:
-    """The render call for iEVO.md.j2 in build.py passes only cortex_version (AC-5)."""
+    """The render call for iEVO.md.j2 in compile.py passes only cortex_version (AC-5)."""
     import cortex.compile as build_module
 
     captured_contexts: list[dict[str, str]] = []
