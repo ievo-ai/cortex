@@ -84,6 +84,52 @@ uv run pytest tests/ --cov
 All dependencies are managed by uv — see `pyproject.toml` for the full list.
 Lychee (Markdown link validator) is a Rust binary used in CI only — not a Python dependency.
 
+## Contributing
+
+### Prerequisites
+
+- **uv** (required) — Python package manager and virtualenv tool:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- **lychee** (optional) — Markdown link validator. Only needed to run `cortex compile`
+  without `--skip-validate`. Link validation runs automatically in CI.
+
+### Quick start
+
+```bash
+git clone https://github.com/ievo-ai/cortex
+cd cortex
+uv sync --extra dev        # installs cortex + pytest + ruff + mypy + watchfiles
+uv run cortex dev --watch  # hot-reload on src/ template changes
+```
+
+Run tests:
+```bash
+uv run pytest tests/
+```
+
+### Godfather dev mode
+
+When developing cortex templates inside the godfather workspace, you can point
+`.ievo/iEVO.md` at the cortex build output so `cortex dev --watch` rebuilds are
+immediately picked up by godfather's context.
+
+From the **godfather root**:
+
+```bash
+# Point iEVO.md at cortex dev output (live rebuilds)
+ln -sf ../repos/cortex/dist/iEVO.md .ievo/iEVO.md
+
+# Restore (points back to CLI-distributed template)
+ln -sf ../repos/cli/src/ievo/marketplace/templates/iEVO.md .ievo/iEVO.md
+```
+
+Verify the symlink with:
+```bash
+ls -la .ievo/iEVO.md
+```
+
 ## Integration
 
 The iEvo CLI downloads and unpacks the latest release asset:
