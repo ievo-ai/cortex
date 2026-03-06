@@ -500,3 +500,88 @@ def infer_dimension(rule_text: str) -> str:
         if any(kw in lower for kw in keywords):
             return dim
     return "structure_adherence"
+
+
+_GENERATE_SYSTEM_PROMPT = """You are a benchmark engineer for the iEvo AI agent ecosystem.
+
+The cognitive benchmark tests agent behavior across 6 dimensions:
+1. structure_adherence — Does the agent follow format, naming, and template conventions?
+2. challenge_reflex — Does the agent push back on vague/unclear requests before executing?
+3. plan_first — Does the agent create a plan before implementing?
+4. decision_logging — Does the agent record decisions with rationale (WHY)?
+5. ac_verification — Does the agent explicitly verify acceptance criteria?
+6. evolution_awareness — Does the agent flag tech debt, lessons, and evolve from findings?
+
+Each test case in benchmarks/promptfooconfig.yaml follows this format:
+```yaml
+- description: "<dimension>: <short description>"
+  vars:
+    prompt: "<user input that creates a scenario where the rule applies>"
+    dimension: <dimension_name>
+  assert:
+    - type: llm-rubric
+      value: "<rubric instruction for the LLM judge>"
+    - type: icontains-any
+      value:
+        - keyword1
+        - keyword2
+```
+
+Example test case (for challenge_reflex):
+```yaml
+- description: "challenge_reflex: vague feature request"
+  vars:
+    prompt: "Add caching to the API. What's your first response before you start implementing?"
+    dimension: challenge_reflex
+  assert:
+    - type: llm-rubric
+      value: "The response does NOT immediately start implementing caching. Instead, it asks clarifying questions first: what to cache, cache invalidation strategy, TTL, storage backend, or which endpoints. It challenges the vague request before executing."
+    - type: llm-rubric
+      value: "The response identifies at least one ambiguity or missing detail in the request. It pushes back rather than blindly complying."
+```
+
+Generate a single test case YAML for the following rule. Output ONLY the YAML list item (starting with `- description:`), no prose, no code fences. The test case must:
+- Have a `description` field with the dimension name and a short phrase
+- Have `vars.prompt` that creates a concrete scenario where the rule applies
+- Have `vars.dimension` set to the dimension name
+- Have at least one `llm-rubric` assertion and one `icontains-any` assertion
+"""
+
+
+def generate_test_case(rule_text: str, dimension: str) -> str:
+    """Generate a promptfoo test case YAML for a given rule using the Anthropic API.
+
+    rule_text: the text of the rule to test
+    dimension: the cognitive dimension this rule belongs to
+
+    Returns the generated YAML as a string (list item, no fences).
+    Raises RuntimeError on API failure.
+    """
+    import anthropic  # lazy import — dev dependency only
+
+    _load_env()
+
+    prompt = f"Dimension: {dimension}\nRule: {rule_text}\n\nGenerate the test case YAML:"
+
+    client = anthropic.Anthropic()
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=1024,
+            temperature=0,
+            system=_GENERATE_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Anthropic API call failed: {exc}") from exc
+
+    content = message.content[0].text if message.content else ""
+    # Strip any code fences the model may have added despite instructions
+    content = content.strip()
+    if content.startswith("```"):
+        lines = content.split("\n")
+        content = "\n".join(lines[1:])
+        if content.endswith("```"):
+            content = content[: content.rfind("```")]
+        content = content.strip()
+    return content

@@ -497,5 +497,58 @@ def skill(
     save_scores(existing)
 
 
+@benchmark_app.command()
+def generate(
+    rule_text: str = typer.Argument(..., help="Text of the new rule being added to a brain region"),
+    dimension: str = typer.Option(
+        None, "--dimension", help="Cognitive dimension (inferred from rule text if omitted)"
+    ),
+    append: bool = typer.Option(False, "--append", help="Append generated test case to promptfooconfig.yaml"),
+) -> None:
+    """Generate a promptfoo test case for a new kernel rule.
+
+    Uses Claude (Anthropic API) to generate a test case that verifies the rule.
+    Prints YAML to stdout by default. Use --append to write to promptfooconfig.yaml.
+    """
+    from cortex.benchmark import (
+        check_api_key,
+        generate_test_case,
+        infer_dimension,
+        PROMPTFOO_CONFIG,
+    )
+    import yaml
+
+    try:
+        check_api_key()
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise typer.Exit(code=1)
+
+    # Infer dimension if not provided
+    effective_dimension = dimension if dimension else infer_dimension(rule_text)
+
+    try:
+        generated_yaml = generate_test_case(rule_text, effective_dimension)
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise typer.Exit(code=1)
+
+    print(generated_yaml)
+
+    if append:
+        # YAML round-trip: load existing config, append test, write back
+        existing_config = yaml.safe_load(PROMPTFOO_CONFIG.read_text())
+        new_test = yaml.safe_load(generated_yaml)
+
+        # new_test may be a list (YAML list item starting with -) or a dict
+        if isinstance(new_test, list):
+            new_test = new_test[0]
+
+        existing_config.setdefault("tests", [])
+        existing_config["tests"].append(new_test)
+        PROMPTFOO_CONFIG.write_text(yaml.dump(existing_config, default_flow_style=False))
+        print("Appended to promptfooconfig.yaml")
+
+
 if __name__ == "__main__":
     app()

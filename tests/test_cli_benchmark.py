@@ -544,3 +544,154 @@ def test_benchmark_skill_appends_run_log(
     entry = json.loads(lines[-1])
     assert entry.get("type") == "skill"
     assert entry.get("skill") == skill_file.stem
+
+
+# ---------------------------------------------------------------------------
+# Subtask 04: cortex benchmark generate
+# ---------------------------------------------------------------------------
+
+_FAKE_GENERATED_YAML = """- description: "plan_first: implement without planning"
+  vars:
+    prompt: "Build an OAuth flow now."
+    dimension: plan_first
+  assert:
+    - type: llm-rubric
+      value: "Creates a plan before implementing"
+    - type: icontains-any
+      value:
+        - plan
+        - outline
+"""
+
+
+def _mock_generate_test_case(rule_text: str, dimension: str) -> str:  # noqa: ARG001
+    return _FAKE_GENERATED_YAML
+
+
+def test_benchmark_generate_help() -> None:
+    """cortex benchmark generate --help exits 0."""
+    result = runner.invoke(app, ["benchmark", "generate", "--help"])
+    assert result.exit_code == 0
+    assert "rule" in result.output.lower() or "generate" in result.output.lower()
+
+
+def test_benchmark_generate_prints_yaml(
+    fake_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """generate prints YAML test case to stdout."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "generate_test_case", _mock_generate_test_case)
+
+    result = runner.invoke(app, ["benchmark", "generate", "always plan before coding"])
+    assert result.exit_code == 0, result.output
+    assert "plan_first" in result.output or "dimension" in result.output.lower()
+
+
+def test_benchmark_generate_infers_dimension(
+    fake_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """generate uses infer_dimension when --dimension not provided."""
+    import cortex.benchmark as bm
+
+    inferred: list[str] = []
+
+    def _capture(rule_text: str, dimension: str) -> str:
+        inferred.append(dimension)
+        return _FAKE_GENERATED_YAML
+
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "generate_test_case", _capture)
+
+    runner.invoke(app, ["benchmark", "generate", "always challenge unclear requests"])
+    assert inferred == ["challenge_reflex"]
+
+
+def test_benchmark_generate_explicit_dimension(
+    fake_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """generate uses --dimension when explicitly provided."""
+    import cortex.benchmark as bm
+
+    called_with: list[str] = []
+
+    def _capture(rule_text: str, dimension: str) -> str:
+        called_with.append(dimension)
+        return _FAKE_GENERATED_YAML
+
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "generate_test_case", _capture)
+
+    runner.invoke(app, [
+        "benchmark", "generate", "some rule text",
+        "--dimension", "decision_logging",
+    ])
+    assert called_with == ["decision_logging"]
+
+
+def test_benchmark_generate_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exits 1 when API key is not set."""
+    import cortex.benchmark as bm
+
+    def _raise() -> None:
+        raise RuntimeError("ANTHROPIC_API_KEY not set — add it to .env or export it")
+
+    monkeypatch.setattr(bm, "check_api_key", _raise)
+
+    result = runner.invoke(app, ["benchmark", "generate", "some rule"])
+    assert result.exit_code == 1
+    assert "ANTHROPIC_API_KEY" in result.output
+
+
+def test_benchmark_generate_append_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--append flag appends generated test case to promptfooconfig.yaml."""
+    import cortex.benchmark as bm
+    import yaml
+
+    # Set up a fake promptfooconfig.yaml
+    fake_config = tmp_path / "promptfooconfig.yaml"
+    fake_config.write_text("""description: test
+tests:
+  - description: existing_test
+    vars:
+      prompt: "hello"
+""")
+    monkeypatch.setattr(bm, "PROMPTFOO_CONFIG", fake_config)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "generate_test_case", _mock_generate_test_case)
+
+    result = runner.invoke(app, ["benchmark", "generate", "plan before coding", "--append"])
+    assert result.exit_code == 0, result.output
+    assert "Appended to promptfooconfig.yaml" in result.output
+
+    # Verify the test was appended
+    updated = yaml.safe_load(fake_config.read_text())
+    assert len(updated["tests"]) == 2  # original + appended
+
+
+def test_benchmark_generate_stdout_only_without_append(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without --append, nothing is written to promptfooconfig.yaml."""
+    import cortex.benchmark as bm
+    import yaml
+
+    fake_config = tmp_path / "promptfooconfig.yaml"
+    fake_config.write_text("""description: test
+tests:
+  - description: existing_test
+    vars:
+      prompt: "hello"
+""")
+    monkeypatch.setattr(bm, "PROMPTFOO_CONFIG", fake_config)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "generate_test_case", _mock_generate_test_case)
+
+    result = runner.invoke(app, ["benchmark", "generate", "plan before coding"])
+    assert result.exit_code == 0
+
+    # Config should be unchanged
+    unchanged = yaml.safe_load(fake_config.read_text())
+    assert len(unchanged["tests"]) == 1

@@ -435,3 +435,63 @@ def test_infer_dimension_fallback() -> None:
     result = infer_dimension("something completely unrelated")
     from cortex.benchmark import DIMENSIONS
     assert result in DIMENSIONS
+
+
+def test_generate_test_case_strips_code_fences(monkeypatch: object) -> None:
+    """generate_test_case() strips ```yaml code fences from LLM output."""
+    import types
+    import cortex.benchmark as bm
+
+    # Mock the anthropic module at the point of lazy import
+    fake_message = types.SimpleNamespace(
+        content=[types.SimpleNamespace(text="""```yaml
+- description: "plan_first: test"
+  vars:
+    prompt: "code now"
+    dimension: plan_first
+  assert:
+    - type: llm-rubric
+      value: "Plans first"
+```""")]
+    )
+    fake_client = types.SimpleNamespace(
+        messages=types.SimpleNamespace(
+            create=lambda **kw: fake_message
+        )
+    )
+    fake_anthropic = types.ModuleType("anthropic")
+    fake_anthropic.Anthropic = lambda: fake_client  # type: ignore[attr-defined]
+
+    import sys
+    sys.modules["anthropic"] = fake_anthropic  # type: ignore[assignment]
+    monkeypatch.setattr(bm, "_load_env", lambda: None)
+
+    result = bm.generate_test_case("plan before coding", "plan_first")
+
+    # Should not start/end with code fences
+    assert not result.startswith("```")
+    assert not result.endswith("```")
+    assert "plan_first" in result
+
+
+def test_generate_test_case_api_error(monkeypatch: object) -> None:
+    """generate_test_case() raises RuntimeError on API failure."""
+    import types
+    import cortex.benchmark as bm
+
+    def _raise(**kw: object) -> None:
+        raise Exception("network error")
+
+    fake_client = types.SimpleNamespace(
+        messages=types.SimpleNamespace(create=_raise)
+    )
+    fake_anthropic = types.ModuleType("anthropic")
+    fake_anthropic.Anthropic = lambda: fake_client  # type: ignore[attr-defined]
+
+    import sys
+    sys.modules["anthropic"] = fake_anthropic  # type: ignore[assignment]
+    monkeypatch.setattr(bm, "_load_env", lambda: None)
+
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError, match="Anthropic API call failed"):
+        bm.generate_test_case("some rule", "plan_first")
