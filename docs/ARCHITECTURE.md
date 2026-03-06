@@ -103,11 +103,37 @@ its own copy (see `REQ-004` comment in `compile.py`).
 | Workflow | Trigger | Steps |
 |----------|---------|-------|
 | `test.yml` | Push + PR on `main` | Lint (ruff) → Test (pytest) |
-| `release.yml` | Push to `main` | Lint → Test → Version bump → `cortex compile --skip-validate` → Install lychee → `lychee` link validation → `uv build` → PyPI publish → GitHub Release with `dist/*` |
+| `release.yml` | Push to `main` | Lint → Test → Version bump → `cortex compile --skip-validate` → Install lychee → `lychee` link validation → `uv build` → PyPI publish (OIDC) → GitHub Release with `dist/*` |
 
 Release pipeline separation: `cortex compile` runs with `--skip-validate` so the
 Python-managed compile step is independent of the Rust `lychee` binary. Lychee
 runs as a separate CI step immediately after.
+
+### PyPI Publishing — OIDC Trusted Publisher
+
+The release workflow publishes to PyPI as `ievo-cortex` using the
+[PyPI trusted publisher](https://docs.pypi.org/trusted-publishers/) mechanism (OIDC).
+This replaces long-lived API token (`PYPI_TOKEN`) with GitHub's short-lived OIDC
+identity token — no secrets to manage.
+
+**Workflow configuration:**
+- Action: `pypa/gh-action-pypi-publish@release/v1`
+- Permission: `id-token: write` (OIDC) + `contents: write` (GitHub Release)
+- No `PYPI_TOKEN` secret required
+
+**PyPI trusted publisher setup (manual, one-time):**
+1. Go to https://pypi.org/manage/account/publishing/
+2. Create a pending publisher with:
+   - PyPI project name: `ievo-cortex`
+   - Owner: `ievo-ai`
+   - Repository: `cortex`
+   - Workflow name: `release.yml`
+   - Environment: _(leave blank)_
+3. The first successful workflow run auto-creates the `ievo-cortex` project on PyPI.
+
+**Package naming:** The PyPI distribution name (`ievo-cortex`) differs from the Python
+import name (`cortex`). The `cortex/` source directory is unchanged — `import cortex`
+continues to work. Only the `[project] name` in `pyproject.toml` was renamed.
 
 ## 9. Dependencies
 
