@@ -1,0 +1,94 @@
+# Cortex Cognitive Benchmark — promptfoo configuration
+#
+# Compares agent behavior WITH kernel (iEVO.md) vs WITHOUT (naked LLM).
+# Run: cortex benchmark run
+# Compare: cortex benchmark compare
+
+description: "Cortex kernel cognitive benchmark"
+
+providers:
+  # Provider A: baseline — naked LLM, no system prompt
+  - id: ollama:chat:qwen2.5:7b
+    label: baseline
+
+  # Provider B: with kernel — iEVO.md as system prompt
+  - id: ollama:chat:qwen2.5:7b
+    label: with-kernel
+    config:
+      systemPrompt: "file://dist/iEVO.md"
+
+# Default test options — use local Qwen as grader for llm-rubric assertions
+defaultTest:
+  options:
+    provider: ollama:chat:qwen2.5:7b
+
+tests:
+  # --- Dimension: structure_adherence ---
+  - description: "structure_adherence: Write a task spec for implementing user authentication"
+    vars:
+      dimension: structure_adherence
+    assert:
+      - type: icontains
+        value: "---"
+      - type: icontains-any
+        value:
+          - "acceptance criteria"
+          - "AC-"
+          - "requirements"
+      - type: llm-rubric
+        value: "The response contains structured output with YAML frontmatter (--- delimiters), clear sections with headings, and follows a template or format rather than free-form prose"
+
+  # --- Dimension: challenge_reflex ---
+  - description: "challenge_reflex: Build a REST API for managing user profiles with CRUD operations"
+    vars:
+      dimension: challenge_reflex
+    assert:
+      - type: llm-rubric
+        value: "The response asks at least one clarifying question before jumping to implementation. Examples: asks about authentication, database choice, validation rules, error handling, or edge cases. Does NOT immediately produce code without questioning the requirements"
+      - type: llm-rubric
+        value: "The response identifies at least one ambiguity, missing detail, or potential issue in the request before providing a solution"
+
+  # --- Dimension: plan_first ---
+  - description: "plan_first: Refactor this module to use dependency injection instead of global state"
+    vars:
+      dimension: plan_first
+    assert:
+      - type: llm-rubric
+        value: "The response creates an explicit plan, outline, or step-by-step approach BEFORE starting the actual implementation. The plan appears before any code changes"
+      - type: llm-rubric
+        value: "The response breaks the work into discrete steps or phases rather than doing everything in one undifferentiated block"
+
+  # --- Dimension: decision_logging ---
+  - description: "decision_logging: Choose between PostgreSQL and MongoDB for storing user sessions with 10M daily active users"
+    vars:
+      dimension: decision_logging
+    assert:
+      - type: llm-rubric
+        value: "The response explicitly states WHY the chosen option was selected, not just WHAT was chosen. Includes reasoning, tradeoffs, or comparison criteria"
+      - type: llm-rubric
+        value: "The response mentions at least two options that were considered and explains why one was preferred over the other"
+
+  # --- Dimension: ac_verification ---
+  - description: "ac_verification: Implement a function that validates email addresses. AC-1: accepts valid emails (user@domain.com). AC-2: rejects emails without @. AC-3: rejects emails without domain. AC-4: returns bool."
+    vars:
+      dimension: ac_verification
+    assert:
+      - type: llm-rubric
+        value: "The response explicitly references or addresses each acceptance criterion (AC-1 through AC-4) individually, not just the overall requirement"
+      - type: icontains-any
+        value:
+          - "AC-1"
+          - "AC-2"
+          - "AC-3"
+          - "AC-4"
+          - "acceptance criteria"
+
+  # --- Dimension: evolution_awareness ---
+  - description: "evolution_awareness: You just discovered that the team's deployment script silently skips database migrations when the connection times out. What do you do?"
+    vars:
+      dimension: evolution_awareness
+    assert:
+      - type: llm-rubric
+        value: "The response suggests documenting the finding as a lesson learned, creating a task or issue to track it, or updating team guidelines to prevent recurrence — not just fixing the immediate bug"
+      - type: llm-rubric
+        value: "The response considers systemic improvement beyond the immediate fix — asks how to prevent this class of problem, not just this specific instance"
