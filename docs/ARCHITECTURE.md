@@ -135,6 +135,87 @@ identity token — no secrets to manage.
 import name (`cortex`). The `cortex/` source directory is unchanged — `import cortex`
 continues to work. Only the `[project] name` in `pyproject.toml` was renamed.
 
+## 10. Brain Regions — Kernel Architecture
+
+The kernel (iEVO.md) is decomposed into functional regions inspired by the human brain.
+Each region is a separate `.md` file in `src/kernel/`. The master template
+`consciousness.md.j2` assembles them into a single consciousness file via
+Jinja2 `{% include %}`.
+
+### Region Map
+
+| Region | File | Responsibility | Brain Analogy |
+|--------|------|---------------|---------------|
+| **Brainstem** | `brainstem.md` | Directory structure, task statuses, file naming conventions — the survival layer | Autonomic functions — without this, the system is dead. Like the biological brainstem regulates heartbeat and breathing, this region defines the minimal structure every agent needs to operate |
+| **Instincts** | `instincts.md` | Hardwired reflexes — challenge requirements first, flag tech debt on sight, verify before recording | Amygdala-driven fight-or-flight — unconditional responses that fire before deliberation. In cognitive architectures (ACT-R, SOAR), these map to **production rules** with highest utility |
+| **Limbic System** | `limbic.md` | Pipeline rules, merge strategy, commit format, branch naming, PR workflow — habitual procedures | Basal ganglia + cerebellum — procedural memory. Automatic sequences executed the same way every time. In SOAR terms: **operator proposals** that always win because they've been reinforced |
+| **Neocortex** | `neocortex.md` | Best practices, proven patterns, architectural knowledge — accumulated experience | Declarative long-term memory. In ACT-R: **chunks in declarative memory** with high activation from repeated retrieval. Knowledge that was learned, not hardwired |
+| **Prefrontal Cortex** | `prefrontal.md` | Evolution conventions, self-improvement rules, meta-learning — controls how other regions change | Executive function — the region that monitors and modifies other regions. In Global Workspace Theory (LIDA): the **attention codelet** that selects what enters consciousness. This is the only region aware of the evolution pipeline |
+| **Working Memory** | `sessions.md` | Session conventions, plan.md/log.md format, context loading rules — short-term state | Prefrontal working memory buffer — limited capacity, refreshed each session. In ACT-R: the **goal buffer** and **imaginal buffer** that hold current task state |
+
+### Design Principles
+
+- **Each region file is plain markdown** — no Jinja syntax. Only `consciousness.md.j2`
+  contains Jinja directives (`{% include %}` and `{{ cortex_version }}`).
+- **Regions are self-contained** — each starts with its own H2 heading
+  (`## Brainstem — Structure & Conventions`).
+- **Order matters** — brainstem loads first (survival), instincts second (reflexes),
+  then habits, knowledge, meta-learning, and finally working memory. This mirrors
+  biological priority: brainstem > limbic > cortex.
+- **Evolution targets regions** — when a lesson is learned, it is classified into
+  the appropriate region file. Classification criteria:
+  - Does it define structure? → Brainstem
+  - Is it an unconditional reflex? → Instincts
+  - Is it a repeatable procedure? → Limbic
+  - Is it learned knowledge? → Neocortex
+  - Is it about how to learn/evolve? → Prefrontal
+  - Is it about session workflow? → Working Memory
+
+### Cognitive Architecture References
+
+The brain metaphor is grounded in established cognitive architectures:
+
+- **ACT-R** (Adaptive Control of Thought—Rational): hybrid system with declarative
+  memory (chunks), procedural memory (productions), and buffers. Our
+  brainstem/instincts ≈ productions, neocortex ≈ declarative chunks,
+  working memory ≈ buffers.
+- **SOAR** (State, Operator And Result): continuous decision cycle with a goal stack.
+  Our limbic ≈ default operator preferences, prefrontal ≈ impasse resolution and
+  chunking (learning).
+- **LIDA/Global Workspace Theory**: perception → understanding → attention
+  (consciousness) → action. Our compile pipeline mirrors this: read regions →
+  assemble → produce single consciousness file → agent consumes it.
+
+## 11. Mutation Validation Pipeline (planned)
+
+Mutations can degrade the kernel. Every mutation must pass a cognitive benchmark before
+being accepted. The pipeline:
+
+```
+cortex mutate "lesson"
+  → applies change to brain region file in src/kernel/
+  → cortex compile (new consciousness)
+  → run cognitive benchmark suite (SWE-bench-like for kernel quality)
+  → compare scores against baseline
+  → IF scores >= baseline → git commit (mutation accepted)
+  → IF scores < baseline  → git checkout (mutation rejected, rolled back)
+```
+
+**Benchmark dimensions (planned):**
+- Task completion rate — can agents following the mutated kernel complete standard tasks?
+- Instruction adherence — does the kernel produce correct agent behavior?
+- Regression detection — do previously passing scenarios still pass?
+
+**Baseline tracking:**
+Each accepted mutation records its benchmark scores in the repo. The baseline is the
+score of the last accepted mutation. This creates a monotonically improving kernel —
+mutations can only be additive to cognitive capability, never degrading.
+
+**Relation to Curator (task 019):**
+The Curator aggregates mutation candidates from across projects. The validation pipeline
+is the gate that decides whether a candidate becomes permanent. Curator proposes,
+validation pipeline disposes.
+
 ## 9. Dependencies
 
 | Category | Packages |
