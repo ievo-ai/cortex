@@ -132,8 +132,8 @@ def test_render_template_strict_undefined_raises(tmp_path: Path) -> None:
 
 
 def test_template_source_exists() -> None:
-    """src/kernel/iEVO.md.j2 exists and is parseable by Jinja2."""
-    template_path = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
+    """src/kernel/consciousness.md.j2 exists and is parseable by Jinja2."""
+    template_path = CORTEX_ROOT / "src" / "kernel" / "consciousness.md.j2"
     assert template_path.exists(), f"Template not found: {template_path}"
 
     env = jinja2.Environment()
@@ -142,8 +142,8 @@ def test_template_source_exists() -> None:
 
 
 def test_template_contains_required_variables() -> None:
-    """iEVO.md.j2 contains {{ cortex_version }} and no provider Jinja2 references (AC-1)."""
-    template_path = CORTEX_ROOT / "src" / "kernel" / "iEVO.md.j2"
+    """consciousness.md.j2 contains {{ cortex_version }} and no provider Jinja2 references (AC-1)."""
+    template_path = CORTEX_ROOT / "src" / "kernel" / "consciousness.md.j2"
     source = template_path.read_text()
 
     assert "{{ cortex_version }}" in source, "Missing {{ cortex_version }} placeholder"
@@ -194,9 +194,9 @@ def test_build_fails_on_missing_template(tmp_path: Path) -> None:
     """build() raises FileNotFoundError when the template file is missing."""
 
     # Temporarily point IEVO_MD_TEMPLATE to a non-existent path
-    fake_template = tmp_path / "nonexistent" / "iEVO.md.j2"
+    fake_template = tmp_path / "nonexistent" / "consciousness.md.j2"
     with patch("cortex.compile.IEVO_MD_TEMPLATE", fake_template):
-        with pytest.raises(FileNotFoundError, match="iEVO.md.j2"):
+        with pytest.raises(FileNotFoundError, match="consciousness.md.j2"):
             build(tag="v1.0.0", dist_dir=tmp_path / "dist")
 
     tarballs = list((tmp_path / "dist").glob("cortex-*.tar.gz")) if (tmp_path / "dist").exists() else []
@@ -207,7 +207,7 @@ def test_build_fails_on_undefined_variable(tmp_path: Path) -> None:
     """build() raises jinja2.UndefinedError when template has unknown variable."""
     # Create a bad template under a structure that matches the loader_root expectation
     src_dir = tmp_path / "src"
-    bad_template = src_dir / "kernel" / "iEVO.md.j2"
+    bad_template = src_dir / "kernel" / "consciousness.md.j2"
     bad_template.parent.mkdir(parents=True)
     bad_template.write_text("Version: {{ undefined_var }}\n")
 
@@ -234,7 +234,7 @@ def test_build_idempotent_rendered_content(tmp_path: Path) -> None:
 
 
 def test_build_ievo_render_context_has_no_provider(tmp_path: Path) -> None:
-    """The render call for iEVO.md.j2 in compile.py passes only cortex_version (AC-5)."""
+    """The render call for consciousness.md.j2 in compile.py passes only cortex_version (AC-5)."""
     import cortex.compile as build_module
 
     captured_contexts: list[dict[str, str]] = []
@@ -243,16 +243,16 @@ def test_build_ievo_render_context_has_no_provider(tmp_path: Path) -> None:
     def capturing_render(
         template_path: Path, context: dict[str, str], loader_root: Path | None = None
     ) -> str:
-        if template_path.name == "iEVO.md.j2":
+        if template_path.name == "consciousness.md.j2":
             captured_contexts.append(dict(context))
         return original_render(template_path, context, loader_root)
 
     with patch.object(build_module, "render_template", side_effect=capturing_render):
         build_module.build(tag="v2.0.0", dist_dir=tmp_path)
 
-    assert captured_contexts, "render_template was never called for iEVO.md.j2"
+    assert captured_contexts, "render_template was never called for consciousness.md.j2"
     assert len(captured_contexts) == 1, (
-        f"render_template called {len(captured_contexts)} times for iEVO.md.j2, expected 1"
+        f"render_template called {len(captured_contexts)} times for consciousness.md.j2, expected 1"
     )
     ctx = captured_contexts[0]
     assert "provider" not in ctx, (

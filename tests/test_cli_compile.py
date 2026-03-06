@@ -80,11 +80,11 @@ def test_compile_skip_validate(tmp_path: Path) -> None:
 def test_compile_missing_template_exits_1(tmp_path: Path) -> None:
     """When build() raises FileNotFoundError, compile exits 1."""
 
-    with patch("cortex.cli.build", side_effect=FileNotFoundError("iEVO.md.j2 not found")):
+    with patch("cortex.cli.build", side_effect=FileNotFoundError("consciousness.md.j2 not found")):
         result = runner.invoke(app, ["compile", "--dist", str(tmp_path)])
 
     assert result.exit_code == 1, f"Expected exit 1, got {result.exit_code}"
-    assert "iEVO.md.j2" in result.output or "Error" in result.output
+    assert "consciousness.md.j2" in result.output or "Error" in result.output
 
 
 def test_compile_undefined_var_exits_1(tmp_path: Path) -> None:

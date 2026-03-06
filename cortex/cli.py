@@ -66,12 +66,13 @@ def dev(
 ) -> None:
     """Single compile for development. Use --watch to recompile on file changes.
 
-    Uses tag 'dev' (not __version__) for fast iteration. Does NOT validate links
-    (speed over correctness for dev workflow). Run `cortex compile` for a full build.
+    Uses tag 'dev' (not __version__) for fast iteration. Validates links after
+    each compile (warns if lychee not installed). Run `cortex compile` for a full build.
     """
     dist_path = Path(dist)
     # Initial compile
     build(tag="dev", dist_dir=dist_path)
+    validate_links(dist_path)
     print(f"Compiled to {dist_path}")
 
     if not watch:
@@ -89,6 +90,7 @@ def dev(
         for changes in fs_watch(CORTEX_ROOT / "src"):
             print(f"Recompiling... {changes}")
             build(tag="dev", dist_dir=dist_path)
+            validate_links(dist_path)
     except KeyboardInterrupt:
         pass
 

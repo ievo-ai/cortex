@@ -55,13 +55,13 @@ def test_dev_default_tag_is_dev(tmp_path: Path) -> None:
     )
 
 
-def test_dev_skips_validation(tmp_path: Path) -> None:
-    """cortex dev does NOT call validate_links() at all (dev speed > correctness)."""
-    with patch("cortex.cli.validate_links") as mock_validate:
+def test_dev_runs_validation(tmp_path: Path) -> None:
+    """cortex dev calls validate_links() after compile."""
+    with patch("cortex.cli.validate_links", return_value=0) as mock_validate:
         result = runner.invoke(app, ["dev", "--dist", str(tmp_path)])
 
     assert result.exit_code == 0, f"Exit {result.exit_code}:\n{result.output}"
-    mock_validate.assert_not_called()
+    mock_validate.assert_called_once()
 
 
 def test_dev_watch_missing_watchfiles(tmp_path: Path) -> None:
@@ -93,6 +93,7 @@ def test_dev_watch_triggers_recompile(tmp_path: Path) -> None:
 
     with (
         patch("cortex.cli.build", side_effect=mock_build),
+        patch("cortex.cli.validate_links", return_value=0),
         patch("cortex.cli.fs_watch", mock_fs_watch),
     ):
         result = runner.invoke(app, ["dev", "--watch", "--dist", str(tmp_path)])
