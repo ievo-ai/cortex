@@ -11,8 +11,8 @@ test_cli_validate.py, and test_package.py:
   6. cortex validate: CLI layer passes the correct path to validate_links (not hardcoded)
   7. cortex dev: "Compiled to" message printed to stdout (spec says print)
   8. cortex dev --watch: src/ directory does not exist — watchfiles raises, CLI handles
-  9. build.py backward-compat wrapper: runs via subprocess end-to-end with --tag
-  10. build.py backward-compat wrapper: missing --tag argument exits non-zero with usage
+  9. (removed — build.py wrapper deleted in task 021)
+  10. (removed — build.py wrapper deleted in task 021)
   11. cortex compile: validate exit code propagation for code != 2 (e.g. 127 from shell)
   12. version_bump.py: generated version matches CalVer pattern YY.MM.DD.HHMM
 """
@@ -46,7 +46,6 @@ def test_qa_version_bump_produces_calver_format(tmp_path: Path) -> None:
     Current __version__ = "0.1.0" is NOT CalVer. This test exercises the
     version_bump.py script to verify it produces a conforming version.
     """
-    bump_script = REPO_ROOT / "scripts" / "version_bump.py"
     # Write to a temp version file
     tmp_version_file = tmp_path / "version.py"
     tmp_version_file.write_text('"""Temp."""\n\n__version__ = "0.0.0"\n')
@@ -282,64 +281,6 @@ def test_qa_dev_watch_nonexistent_src_dir_exits_nonzero(tmp_path: Path) -> None:
     assert result.exit_code != 0 or "Traceback" not in result.output, (
         f"Expected either non-zero exit or no traceback. Exit: {result.exit_code}. "
         f"Output:\n{result.output}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# 9. build.py backward-compat wrapper: subprocess end-to-end run
-# ---------------------------------------------------------------------------
-
-
-def test_qa_build_py_wrapper_runs_via_subprocess(tmp_path: Path) -> None:
-    """build.py backward-compat wrapper runs successfully via subprocess with --tag.
-
-    The Coder only verified that build.py exists and imports from cortex.compile.
-    This test runs it as a subprocess with --skip-validate-equivalent approach:
-    uses a real --tag value and verifies the tarball is created.
-
-    Note: build.py calls validate_links() after build(). Since lychee is not
-    installed in CI, validate_links returns 0 and build.py exits 0.
-    """
-    result = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "build.py"), "--tag", "qa-test", "--dist", str(tmp_path)],
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
-    )
-
-    assert result.returncode == 0, (
-        f"build.py --tag qa-test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
-    )
-
-    tarball = tmp_path / "cortex-qa-test.tar.gz"
-    assert tarball.exists(), (
-        f"Expected cortex-qa-test.tar.gz in {tmp_path}. "
-        f"Found: {list(tmp_path.iterdir())}\n"
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
-    )
-
-
-def test_qa_build_py_wrapper_missing_tag_exits_nonzero(tmp_path: Path) -> None:
-    """build.py backward-compat wrapper exits non-zero when --tag is missing.
-
-    build.py uses argparse with `required=True` for --tag. Running without
-    --tag must fail with a usage error (argparse prints to stderr + exit 2).
-    """
-    result = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "build.py"), "--dist", str(tmp_path)],
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
-    )
-
-    assert result.returncode != 0, (
-        f"Expected non-zero exit when --tag is missing, got {result.returncode}. "
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
-    )
-
-    # argparse writes usage error to stderr
-    assert "error" in result.stderr.lower() or "usage" in result.stderr.lower(), (
-        f"Expected usage/error message in stderr:\n{result.stderr}"
     )
 
 

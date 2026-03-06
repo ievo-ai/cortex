@@ -19,8 +19,6 @@ cortex/
 │   ├── skills/         # Skill YAML templates
 │   └── kernel/
 │       └── iEVO.md.j2  # iEVO pipeline conventions — Jinja2 template source
-├── build.py            # Build script — renders provider artifacts + creates tarball
-│                       #   └── validate_links() — runs lychee on dist/ (CI only)
 ├── tests/              # Build script tests
 └── .github/
     └── workflows/
