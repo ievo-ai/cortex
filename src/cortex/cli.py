@@ -537,8 +537,13 @@ def generate(
 
     if append:
         # YAML round-trip: load existing config, append test, write back
+        try:
+            new_test = yaml.safe_load(generated_yaml)
+        except yaml.YAMLError as exc:
+            print(f"Error: generated YAML is malformed — review output above and append manually\n{exc}", file=sys.stderr)
+            raise typer.Exit(code=1)
+
         existing_config = yaml.safe_load(PROMPTFOO_CONFIG.read_text())
-        new_test = yaml.safe_load(generated_yaml)
 
         # new_test may be a list (YAML list item starting with -) or a dict
         if isinstance(new_test, list):

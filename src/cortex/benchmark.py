@@ -15,6 +15,7 @@ import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from cortex.compile import CORTEX_ROOT
 
@@ -134,7 +135,7 @@ class SkillBenchmarkEntry:
     scores: dict[str, float]
     overall: float
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp": self.timestamp,
             "model": self.model,
@@ -143,7 +144,7 @@ class SkillBenchmarkEntry:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> SkillBenchmarkEntry:
+    def from_dict(cls, d: dict[str, Any]) -> SkillBenchmarkEntry:
         return cls(
             timestamp=d.get("timestamp", ""),
             model=d.get("model", MODEL),
@@ -155,16 +156,16 @@ class SkillBenchmarkEntry:
 @dataclass
 class SkillScores:
     baseline: SkillBenchmarkEntry | None = None
-    mutations: list = field(default_factory=list)
+    mutations: list[dict[str, Any]] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "baseline": self.baseline.to_dict() if self.baseline else None,
             "mutations": self.mutations,
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> SkillScores:
+    def from_dict(cls, d: dict[str, Any]) -> SkillScores:
         baseline = SkillBenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
         return cls(baseline=baseline, mutations=d.get("mutations", []))
 
@@ -174,14 +175,14 @@ class AgentScores:
     baseline: BenchmarkEntry | None = None
     mutations: list[MutationEntry] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "baseline": self.baseline.to_dict() if self.baseline else None,
             "mutations": [m.to_dict() for m in self.mutations],
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> AgentScores:
+    def from_dict(cls, d: dict[str, Any]) -> AgentScores:
         baseline = BenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
         mutations = [MutationEntry.from_dict(m) for m in d.get("mutations", [])]
         return cls(baseline=baseline, mutations=mutations)
@@ -362,7 +363,7 @@ def append_run_log(
     naked: DimensionScores,
     kernel: DimensionScores,
     run_type: str = "kernel",
-    extra: dict | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> None:
     """Append a run entry to the JSONL log file.
 
@@ -370,7 +371,7 @@ def append_run_log(
     extra: additional fields to include (e.g. {"agent": "spec-writer"})
     """
     RUNS_LOG.parent.mkdir(parents=True, exist_ok=True)
-    entry: dict = {
+    entry: dict[str, Any] = {
         "timestamp": now_iso(),
         "type": run_type,
         "model": MODEL,
@@ -437,7 +438,7 @@ def append_skill_run_log(
 ) -> None:
     """Append a skill run entry to the JSONL log file."""
     RUNS_LOG.parent.mkdir(parents=True, exist_ok=True)
-    entry: dict = {
+    entry: dict[str, Any] = {
         "timestamp": now_iso(),
         "type": "skill",
         "model": MODEL,
