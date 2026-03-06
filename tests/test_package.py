@@ -198,16 +198,17 @@ def test_pyproject_dynamic_version() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 12. backward-compat build.py
+# 12. backward-compat build.py removed (task 021)
 # ---------------------------------------------------------------------------
 
 
-def test_backward_compat_build_py_exists() -> None:
-    """build.py still exists at repo root, imports from cortex.compile."""
-    build_py = REPO_ROOT / "build.py"
-    assert build_py.exists(), "build.py must still exist at repo root"
+def test_build_py_wrapper_removed() -> None:
+    """build.py backward-compat wrapper has been deleted (task 021).
 
-    source = build_py.read_text()
-    assert "cortex.compile" in source, (
-        f"build.py must import from cortex.compile; found:\n{source[:500]}"
+    All callers have migrated to `uv run cortex compile`. The wrapper is dead code.
+    """
+    build_py = REPO_ROOT / "build.py"
+    assert not build_py.exists(), (
+        "build.py backward-compat wrapper must be deleted. "
+        "All callers now use `uv run cortex compile`."
     )
