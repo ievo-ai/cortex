@@ -232,24 +232,32 @@ def run_promptfoo(output_path: Path) -> subprocess.CompletedProcess:
     )
 
 
-def parse_results(output_path: Path) -> DimensionScores:
-    """Parse promptfoo JSON output into dimension scores."""
+def parse_results(output_path: Path, provider_label: str = "with-kernel") -> DimensionScores:
+    """Parse promptfoo JSON output into dimension scores.
+
+    Filters results to the given provider label (default: "with-kernel").
+    promptfoo runs both providers on every test — we only want scores for one.
+    """
     data = json.loads(output_path.read_text())
 
     results = data.get("results", data)
     test_results = results.get("results", [])
 
-    # Group pass rates by dimension (from test metadata or description)
+    # Group pass rates by dimension, filtered by provider
     dimension_passes: dict[str, list[bool]] = {d: [] for d in DIMENSIONS}
 
     for test in test_results:
+        # Filter by provider label
+        label = test.get("provider", {}).get("label", "")
+        if label != provider_label:
+            continue
+
         # Get dimension from test vars or description
         dim = None
         test_vars = test.get("vars", {})
         if "dimension" in test_vars:
             dim = test_vars["dimension"]
         else:
-            # Try to infer from description
             desc = test.get("description", "").lower()
             for d in DIMENSIONS:
                 if d.replace("_", " ") in desc or d.replace("_", "-") in desc:

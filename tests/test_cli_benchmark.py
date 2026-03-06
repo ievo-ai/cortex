@@ -29,16 +29,24 @@ def fake_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _mock_promptfoo_success(output_path: Path) -> MagicMock:
     """Create a fake promptfoo result that writes valid JSON output."""
-    # Write a fake promptfoo output file
+    # Write a fake promptfoo output file — include both providers like real promptfoo
     output_path.write_text(json.dumps({
         "results": {
             "results": [
-                {"vars": {"dimension": "structure_adherence"}, "success": True},
-                {"vars": {"dimension": "challenge_reflex"}, "success": True},
-                {"vars": {"dimension": "plan_first"}, "success": False},
-                {"vars": {"dimension": "decision_logging"}, "success": True},
-                {"vars": {"dimension": "ac_verification"}, "success": True},
-                {"vars": {"dimension": "evolution_awareness"}, "success": False},
+                # baseline provider results (should be ignored by parse_results)
+                {"provider": {"label": "baseline"}, "vars": {"dimension": "structure_adherence"}, "success": False},
+                {"provider": {"label": "baseline"}, "vars": {"dimension": "challenge_reflex"}, "success": False},
+                {"provider": {"label": "baseline"}, "vars": {"dimension": "plan_first"}, "success": False},
+                {"provider": {"label": "baseline"}, "vars": {"dimension": "decision_logging"}, "success": False},
+                {"provider": {"label": "baseline"}, "vars": {"dimension": "ac_verification"}, "success": False},
+                {"provider": {"label": "baseline"}, "vars": {"dimension": "evolution_awareness"}, "success": False},
+                # with-kernel provider results (these are what we score)
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "structure_adherence"}, "success": True},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "challenge_reflex"}, "success": True},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "plan_first"}, "success": False},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "decision_logging"}, "success": True},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "ac_verification"}, "success": True},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "evolution_awareness"}, "success": False},
             ]
         }
     }))
