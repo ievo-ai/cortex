@@ -10,14 +10,12 @@ Covers gaps not addressed by test_build.py or test_cortex_edge.py:
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import tarfile
 from pathlib import Path
 
 import pytest
 
-from build import build, build_claude_target, build_codex_target
+from cortex.compile import build, build_claude_target, build_codex_target
 
 
 CORTEX_ROOT = Path(__file__).parent.parent

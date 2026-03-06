@@ -2,8 +2,12 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-release:
@@ -19,12 +23,23 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --extra dev
 
-      - name: Build release artifacts
-        env:
-          TAG: ${{ github.ref_name }}
-        run: uv run python build.py --tag "$TAG" --dist ./dist
+      - name: Lint
+        run: uv run ruff check cortex/
+
+      - name: Test
+        run: uv run pytest tests/ -v
+
+      - name: Bump version
+        id: version
+        run: |
+          python scripts/version_bump.py
+          VERSION=$(python -c "import ast; print(ast.literal_eval(open('cortex/version.py').read().split('=')[1].strip()))")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Compile release artifacts
+        run: uv run cortex compile --skip-validate --dist ./dist
 
       - name: Install lychee
         env:
@@ -37,12 +52,20 @@ jobs:
       - name: Validate Markdown links
         run: lychee --offline --include-fragments --no-progress dist/
 
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: uv publish
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "$TAG" \
-            --title "Cortex $TAG" \
-            --notes "Cortex kernel release $TAG" \
-            "dist/cortex-${TAG}.tar.gz"
+          gh release create "$VERSION" \
+            --title "Cortex $VERSION" \
+            --generate-notes \
+            dist/*

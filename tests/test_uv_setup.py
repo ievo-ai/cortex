@@ -58,19 +58,19 @@ def test_ci_uses_setup_uv() -> None:
     assert "astral-sh/setup-uv" in content, "CI does not use astral-sh/setup-uv"
 
 
-def test_ci_uses_uv_sync_frozen() -> None:
-    """AC-5: CI uses uv sync --frozen to install deps."""
+def test_ci_uses_uv_sync() -> None:
+    """AC-5: CI uses uv sync to install deps."""
     ci_path = REPO_ROOT / ".github" / "workflows" / "release.yml"
     content = ci_path.read_text()
-    assert "uv sync --frozen" in content, "CI does not use 'uv sync --frozen'"
+    assert "uv sync" in content, "CI does not use 'uv sync'"
 
 
-def test_ci_uses_uv_run_for_build() -> None:
-    """AC-5: CI uses uv run python build.py for the build step."""
+def test_ci_uses_cortex_compile_for_build() -> None:
+    """AC-5: CI uses cortex compile for the build step."""
     ci_path = REPO_ROOT / ".github" / "workflows" / "release.yml"
     content = ci_path.read_text()
-    assert "uv run python build.py" in content, (
-        "CI does not use 'uv run python build.py'"
+    assert "cortex compile" in content, (
+        "CI does not use 'cortex compile'"
     )
 
 
@@ -122,15 +122,15 @@ def test_uv_run_pytest_passes() -> None:
 
 
 def test_uv_run_build_produces_tarball(tmp_path: Path) -> None:
-    """AC-7: uv run python build.py --tag v0.0.1 produces dist/cortex-v0.0.1.tar.gz."""
+    """AC-7: uv run cortex compile produces a tarball in dist/."""
     result = subprocess.run(
-        ["uv", "run", "python", "build.py", "--tag", "v0.0.1", "--dist", str(tmp_path)],
+        ["uv", "run", "cortex", "compile", "--skip-validate", "--dist", str(tmp_path)],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
     )
     assert result.returncode == 0, (
-        f"build.py failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        f"cortex compile failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
-    tarball = tmp_path / "cortex-v0.0.1.tar.gz"
-    assert tarball.exists(), f"Expected tarball not found: {tarball}"
+    tarballs = list(tmp_path.glob("cortex-*.tar.gz"))
+    assert tarballs, f"Expected tarball not found in: {list(tmp_path.iterdir())}"

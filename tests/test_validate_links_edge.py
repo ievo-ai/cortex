@@ -1,4 +1,4 @@
-"""QA edge-case tests for validate_links() in build.py.
+"""QA edge-case tests for validate_links() in cortex.compile.
 
 Scenarios not covered by the Coder's test_validate_links.py:
   1. lychee exits with code 1 (runtime error) vs code 2 (broken links) — both non-zero
@@ -8,19 +8,17 @@ Scenarios not covered by the Coder's test_validate_links.py:
   5. lychee exits non-zero and produces output only on stdout (not stderr)
   6. lychee exits non-zero and produces output only on stderr (not stdout)
   7. lychee exits non-zero with both stdout and stderr empty (silent failure)
-  8. sys.exit is called with the exact return code from lychee (not hardcoded)
+  8. Return code from lychee is propagated exactly (not hardcoded)
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from build import validate_links  # noqa: E402
+from cortex.compile import validate_links
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +27,7 @@ from build import validate_links  # noqa: E402
 
 
 def test_qa_lychee_exit_code_1_treated_as_failure(tmp_path: Path) -> None:
-    """lychee exit code 1 (runtime/config error) must also cause sys.exit(1).
+    """lychee exit code 1 (runtime/config error) must also cause validate_links to return 1.
 
     The Coder only tested returncode=2. Exit code 1 is a distinct lychee exit
     code meaning a runtime error (bad flag, unreadable file, etc.). Both must
@@ -41,19 +39,18 @@ def test_qa_lychee_exit_code_1_treated_as_failure(tmp_path: Path) -> None:
     mock_result.stderr = "lychee: error: unrecognised flag --bogus"
 
     with (
-        patch("shutil.which", return_value="/usr/local/bin/lychee"),
-        patch("subprocess.run", return_value=mock_result),
-        pytest.raises(SystemExit) as exc_info,
+        patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
+        patch("cortex.compile.subprocess.run", return_value=mock_result),
     ):
-        validate_links(tmp_path)
+        rc = validate_links(tmp_path)
 
-    assert exc_info.value.code == 1, (
-        f"Expected sys.exit(1) for lychee runtime error, got sys.exit({exc_info.value.code!r})"
+    assert rc == 1, (
+        f"Expected return code 1 for lychee runtime error, got {rc!r}"
     )
 
 
 def test_qa_exit_code_preserved_exactly(tmp_path: Path) -> None:
-    """sys.exit() is called with lychee's actual return code, not a hardcoded value.
+    """validate_links() returns lychee's actual return code, not a hardcoded value.
 
     Verifies that validate_links() propagates any non-zero code, not just 1 or 2.
     lychee can exit with 3 in some versions to signal different failure modes.
@@ -65,14 +62,13 @@ def test_qa_exit_code_preserved_exactly(tmp_path: Path) -> None:
         mock_result.stderr = ""
 
         with (
-            patch("shutil.which", return_value="/usr/local/bin/lychee"),
-            patch("subprocess.run", return_value=mock_result),
-            pytest.raises(SystemExit) as exc_info,
+            patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
+            patch("cortex.compile.subprocess.run", return_value=mock_result),
         ):
-            validate_links(tmp_path)
+            rc = validate_links(tmp_path)
 
-        assert exc_info.value.code == code, (
-            f"Expected sys.exit({code}), got sys.exit({exc_info.value.code!r})"
+        assert rc == code, (
+            f"Expected return code {code}, got {rc!r}"
         )
 
 
@@ -89,9 +85,9 @@ def test_qa_lychee_not_executable_propagates_error(tmp_path: Path) -> None:
     not be swallowed — it should propagate to the caller so the build fails loudly.
     """
     with (
-        patch("shutil.which", return_value="/usr/local/bin/lychee"),
+        patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
         patch(
-            "subprocess.run",
+            "cortex.compile.subprocess.run",
             side_effect=PermissionError("[Errno 13] Permission denied: '/usr/local/bin/lychee'"),
         ),
         pytest.raises(PermissionError),
@@ -120,8 +116,8 @@ def test_qa_nonexistent_dist_dir_still_calls_lychee(tmp_path: Path) -> None:
     mock_result.stderr = ""
 
     with (
-        patch("shutil.which", return_value="/usr/local/bin/lychee"),
-        patch("subprocess.run", return_value=mock_result) as mock_run,
+        patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
+        patch("cortex.compile.subprocess.run", return_value=mock_result) as mock_run,
     ):
         validate_links(nonexistent_dir)  # must not raise (lychee returns 0)
 
@@ -155,8 +151,8 @@ def test_qa_empty_dist_dir_still_calls_lychee(tmp_path: Path) -> None:
     mock_result.stderr = ""
 
     with (
-        patch("shutil.which", return_value="/usr/local/bin/lychee"),
-        patch("subprocess.run", return_value=mock_result) as mock_run,
+        patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
+        patch("cortex.compile.subprocess.run", return_value=mock_result) as mock_run,
     ):
         validate_links(empty_dir)
 
@@ -184,12 +180,12 @@ def test_qa_lychee_stdout_only_output_printed_to_stderr(
     mock_result.stderr = ""
 
     with (
-        patch("shutil.which", return_value="/usr/local/bin/lychee"),
-        patch("subprocess.run", return_value=mock_result),
-        pytest.raises(SystemExit),
+        patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
+        patch("cortex.compile.subprocess.run", return_value=mock_result),
     ):
-        validate_links(tmp_path)
+        rc = validate_links(tmp_path)
 
+    assert rc == 2
     captured = capsys.readouterr()
     assert "BROKEN" in captured.err, (
         f"Expected lychee stdout routed to stderr, got err={captured.err!r}"
@@ -206,12 +202,12 @@ def test_qa_lychee_stderr_only_output_printed_to_stderr(
     mock_result.stderr = "lychee runtime error: cannot read directory"
 
     with (
-        patch("shutil.which", return_value="/usr/local/bin/lychee"),
-        patch("subprocess.run", return_value=mock_result),
-        pytest.raises(SystemExit),
+        patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
+        patch("cortex.compile.subprocess.run", return_value=mock_result),
     ):
-        validate_links(tmp_path)
+        rc = validate_links(tmp_path)
 
+    assert rc == 1
     captured = capsys.readouterr()
     assert "runtime error" in captured.err, (
         f"Expected lychee stderr forwarded to our stderr, got err={captured.err!r}"
@@ -219,10 +215,10 @@ def test_qa_lychee_stderr_only_output_printed_to_stderr(
 
 
 def test_qa_silent_failure_still_exits(tmp_path: Path) -> None:
-    """lychee exits non-zero with no output at all — build must still fail.
+    """lychee exits non-zero with no output at all — validate_links must still return non-zero.
 
     Empty stdout and stderr is unusual but possible (e.g. lychee killed by OOM).
-    validate_links() must call sys.exit() even when there is nothing to print.
+    validate_links() must return the exit code even when there is nothing to print.
     """
     mock_result = MagicMock()
     mock_result.returncode = 2
@@ -230,13 +226,12 @@ def test_qa_silent_failure_still_exits(tmp_path: Path) -> None:
     mock_result.stderr = ""
 
     with (
-        patch("shutil.which", return_value="/usr/local/bin/lychee"),
-        patch("subprocess.run", return_value=mock_result),
-        pytest.raises(SystemExit) as exc_info,
+        patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
+        patch("cortex.compile.subprocess.run", return_value=mock_result),
     ):
-        validate_links(tmp_path)
+        rc = validate_links(tmp_path)
 
-    assert exc_info.value.code == 2
+    assert rc == 2
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +252,8 @@ def test_qa_dist_dir_passed_as_string_to_subprocess(tmp_path: Path) -> None:
     mock_result.stderr = ""
 
     with (
-        patch("shutil.which", return_value="/usr/local/bin/lychee"),
-        patch("subprocess.run", return_value=mock_result) as mock_run,
+        patch("cortex.compile.shutil.which", return_value="/usr/local/bin/lychee"),
+        patch("cortex.compile.subprocess.run", return_value=mock_result) as mock_run,
     ):
         validate_links(tmp_path)
 

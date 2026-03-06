@@ -1,14 +1,10 @@
-"""Tests for cortex build script.
+"""Tests for cortex compile module.
 
-TDD: tests written before build.py is implemented.
+TDD: tests written before cortex/compile.py is implemented.
 """
 
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
-import sys
 import tarfile
 from pathlib import Path
 from unittest.mock import patch
@@ -16,42 +12,22 @@ from unittest.mock import patch
 import jinja2
 import pytest
 
-from build import render_template
+from cortex.compile import build, render_template
 
 
 CORTEX_ROOT = Path(__file__).parent.parent
 
 
-def run_build(tmp_path: Path, tag: str = "v1.0.0") -> subprocess.CompletedProcess[str]:
-    """Run build.py from the cortex root into the given tmp_path."""
-    return subprocess.run(
-        [
-            sys.executable,
-            str(CORTEX_ROOT / "build.py"),
-            "--tag",
-            tag,
-            "--dist",
-            str(tmp_path),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(CORTEX_ROOT),
-    )
-
-
 def test_build_creates_tarball(tmp_path: Path) -> None:
-    """build.py creates cortex-<tag>.tar.gz in the dist directory."""
-    result = run_build(tmp_path, tag="v1.0.0")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
-
-    tarball = tmp_path / "cortex-v1.0.0.tar.gz"
+    """build() creates cortex-<tag>.tar.gz in the dist directory."""
+    tarball = build(tag="v1.0.0", dist_dir=tmp_path)
     assert tarball.exists(), f"Expected {tarball} but found: {list(tmp_path.iterdir())}"
+    assert tarball.name == "cortex-v1.0.0.tar.gz"
 
 
 def test_tarball_contains_both_providers(tmp_path: Path) -> None:
     """The release asset, when unpacked, contains both claude/ and codex/ directories."""
-    result = run_build(tmp_path, tag="v1.0.0")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+    build(tag="v1.0.0", dist_dir=tmp_path)
 
     tarball = tmp_path / "cortex-v1.0.0.tar.gz"
     with tarfile.open(tarball, "r:gz") as tf:
@@ -67,8 +43,7 @@ def test_tarball_contains_both_providers(tmp_path: Path) -> None:
 
 def test_tarball_contains_ievo_md_at_root(tmp_path: Path) -> None:
     """The tarball contains iEVO.md at root level — not under a provider subdirectory (AC-4)."""
-    result = run_build(tmp_path, tag="v1.0.0")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+    build(tag="v1.0.0", dist_dir=tmp_path)
 
     tarball = tmp_path / "cortex-v1.0.0.tar.gz"
     with tarfile.open(tarball, "r:gz") as tf:
@@ -85,8 +60,7 @@ def test_tarball_contains_ievo_md_at_root(tmp_path: Path) -> None:
 
 def test_tarball_codex_contains_build_target_md(tmp_path: Path) -> None:
     """The codex/ directory contains BUILD_TARGET.md (placeholder for v1)."""
-    result = run_build(tmp_path, tag="v1.0.0")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+    build(tag="v1.0.0", dist_dir=tmp_path)
 
     tarball = tmp_path / "cortex-v1.0.0.tar.gz"
     with tarfile.open(tarball, "r:gz") as tf:
@@ -98,15 +72,15 @@ def test_tarball_codex_contains_build_target_md(tmp_path: Path) -> None:
 
 
 def test_build_idempotent(tmp_path: Path) -> None:
-    """Running build.py twice produces identical tarballs (same member names)."""
-    run_build(tmp_path, tag="v1.0.0")
+    """Running build() twice produces identical tarballs (same member names)."""
+    build(tag="v1.0.0", dist_dir=tmp_path)
     tarball = tmp_path / "cortex-v1.0.0.tar.gz"
 
     with tarfile.open(tarball, "r:gz") as tf:
         names_first = sorted(tf.getnames())
 
     # Run again (overwrites)
-    run_build(tmp_path, tag="v1.0.0")
+    build(tag="v1.0.0", dist_dir=tmp_path)
 
     with tarfile.open(tarball, "r:gz") as tf:
         names_second = sorted(tf.getnames())
@@ -117,11 +91,9 @@ def test_build_idempotent(tmp_path: Path) -> None:
 
 
 def test_build_uses_provided_tag(tmp_path: Path) -> None:
-    """build.py embeds the --tag value in the output filename."""
-    result = run_build(tmp_path, tag="v2.3.4")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
-
-    tarball = tmp_path / "cortex-v2.3.4.tar.gz"
+    """build() embeds the tag value in the output filename."""
+    tarball = build(tag="v2.3.4", dist_dir=tmp_path)
+    assert tarball.name == "cortex-v2.3.4.tar.gz"
     assert tarball.exists(), (
         f"Expected cortex-v2.3.4.tar.gz but found: {list(tmp_path.iterdir())}"
     )
@@ -190,8 +162,7 @@ def test_template_contains_required_variables() -> None:
 
 def test_build_ievo_md_contains_version(tmp_path: Path) -> None:
     """dist/iEVO.md contains the version tag and no unrendered Jinja2 syntax (AC-2)."""
-    result = run_build(tmp_path, tag="v1.2.0")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+    build(tag="v1.2.0", dist_dir=tmp_path)
 
     ievo_md = tmp_path / "iEVO.md"
     assert ievo_md.exists(), "dist/iEVO.md not found"
@@ -204,8 +175,7 @@ def test_build_ievo_md_contains_version(tmp_path: Path) -> None:
 
 def test_build_no_provider_ievo_md_in_subdirs(tmp_path: Path) -> None:
     """dist/claude/iEVO.md and dist/codex/iEVO.md must NOT exist after build (AC-3)."""
-    result = run_build(tmp_path, tag="v2.0.0")
-    assert result.returncode == 0, f"build.py failed:\n{result.stderr}"
+    build(tag="v2.0.0", dist_dir=tmp_path)
 
     assert not (tmp_path / "claude" / "iEVO.md").exists(), (
         "dist/claude/iEVO.md must not be created"
@@ -221,87 +191,44 @@ def test_build_no_provider_ievo_md_in_subdirs(tmp_path: Path) -> None:
 
 
 def test_build_fails_on_missing_template(tmp_path: Path) -> None:
-    """build.py exits non-zero and mentions iEVO.md.j2 when template is missing."""
-    # Copy cortex source to a temp dir so we can remove the template
-    build_dir = tmp_path / "cortex_src"
-    shutil.copytree(
-        CORTEX_ROOT,
-        build_dir,
-        ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"),
-    )
+    """build() raises FileNotFoundError when the template file is missing."""
+    from cortex.compile import IEVO_MD_TEMPLATE
 
-    template = build_dir / "src" / "kernel" / "iEVO.md.j2"
-    template.unlink()
+    # Temporarily point IEVO_MD_TEMPLATE to a non-existent path
+    fake_template = tmp_path / "nonexistent" / "iEVO.md.j2"
+    with patch("cortex.compile.IEVO_MD_TEMPLATE", fake_template):
+        with pytest.raises(FileNotFoundError, match="iEVO.md.j2"):
+            build(tag="v1.0.0", dist_dir=tmp_path / "dist")
 
-    dist_dir = tmp_path / "dist"
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(build_dir / "build.py"),
-            "--tag",
-            "v1.0.0",
-            "--dist",
-            str(dist_dir),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(build_dir),
-        env={**os.environ, "PYTHONPATH": str(build_dir)},
-    )
-
-    assert result.returncode != 0, "Expected non-zero exit when template is missing"
-    assert "iEVO.md.j2" in result.stderr, (
-        f"Expected iEVO.md.j2 in stderr, got:\n{result.stderr}"
-    )
-
-    tarballs = list(dist_dir.glob("cortex-*.tar.gz")) if dist_dir.exists() else []
+    tarballs = list((tmp_path / "dist").glob("cortex-*.tar.gz")) if (tmp_path / "dist").exists() else []
     assert not tarballs, f"No tarball should be created on error, found: {tarballs}"
 
 
 def test_build_fails_on_undefined_variable(tmp_path: Path) -> None:
-    """build.py exits non-zero and mentions the undefined var when template has unknown var."""
-    # Copy cortex source to a temp dir so we can inject a bad template
-    build_dir = tmp_path / "cortex_src"
-    shutil.copytree(
-        CORTEX_ROOT,
-        build_dir,
-        ignore=shutil.ignore_patterns(".venv", "dist", "__pycache__", ".git"),
-    )
+    """build() raises jinja2.UndefinedError when template has unknown variable."""
+    # Create a bad template under a structure that matches the loader_root expectation
+    src_dir = tmp_path / "src"
+    bad_template = src_dir / "kernel" / "iEVO.md.j2"
+    bad_template.parent.mkdir(parents=True)
+    bad_template.write_text("Version: {{ undefined_var }}\n")
 
-    template = build_dir / "src" / "kernel" / "iEVO.md.j2"
-    template.write_text("Version: {{ undefined_var }}\n")
+    with (
+        patch("cortex.compile.IEVO_MD_TEMPLATE", bad_template),
+        patch("cortex.compile.CORTEX_ROOT", tmp_path),
+    ):
+        with pytest.raises(jinja2.UndefinedError, match="undefined_var"):
+            build(tag="v1.0.0", dist_dir=tmp_path / "dist")
 
-    dist_dir = tmp_path / "dist"
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(build_dir / "build.py"),
-            "--tag",
-            "v1.0.0",
-            "--dist",
-            str(dist_dir),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(build_dir),
-        env={**os.environ, "PYTHONPATH": str(build_dir)},
-    )
-
-    assert result.returncode != 0, "Expected non-zero exit on undefined variable"
-    assert "undefined_var" in result.stderr, (
-        f"Expected undefined_var in stderr, got:\n{result.stderr}"
-    )
-
-    tarballs = list(dist_dir.glob("cortex-*.tar.gz")) if dist_dir.exists() else []
+    tarballs = list((tmp_path / "dist").glob("cortex-*.tar.gz")) if (tmp_path / "dist").exists() else []
     assert not tarballs, f"No tarball should be created on error, found: {tarballs}"
 
 
 def test_build_idempotent_rendered_content(tmp_path: Path) -> None:
-    """Running build.py twice produces byte-identical dist/iEVO.md (AC-6)."""
-    run_build(tmp_path, tag="v1.2.0")
+    """Running build() twice produces byte-identical dist/iEVO.md (AC-6)."""
+    build(tag="v1.2.0", dist_dir=tmp_path)
     first = (tmp_path / "iEVO.md").read_bytes()
 
-    run_build(tmp_path, tag="v1.2.0")
+    build(tag="v1.2.0", dist_dir=tmp_path)
     second = (tmp_path / "iEVO.md").read_bytes()
 
     assert first == second, "dist/iEVO.md differs between runs"
@@ -309,7 +236,7 @@ def test_build_idempotent_rendered_content(tmp_path: Path) -> None:
 
 def test_build_ievo_render_context_has_no_provider(tmp_path: Path) -> None:
     """The render call for iEVO.md.j2 in build.py passes only cortex_version (AC-5)."""
-    import build as build_module
+    import cortex.compile as build_module
 
     captured_contexts: list[dict[str, str]] = []
     original_render = build_module.render_template

@@ -1,4 +1,4 @@
-"""QA edge-case tests for cortex build script (REQ-002, updated for REQ-004).
+"""QA edge-case tests for cortex compile module (REQ-002, updated for REQ-004).
 
 These tests cover gaps not addressed by the Coder's test_build.py:
   - render_template() unit-level error paths
@@ -12,13 +12,11 @@ These tests cover gaps not addressed by the Coder's test_build.py:
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-from build import build, render_template
+from cortex.compile import build, render_template
 
 
 CORTEX_ROOT = Path(__file__).parent.parent
@@ -104,21 +102,9 @@ def test_qa_template_with_only_cortex_version_renders_cleanly(tmp_path: Path) ->
 
 
 def test_qa_empty_tag_renders_empty_version_in_output(tmp_path: Path) -> None:
-    """An empty --tag value embeds an empty string for cortex_version without crashing."""
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(CORTEX_ROOT / "build.py"),
-            "--tag",
-            "",
-            "--dist",
-            str(tmp_path),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(CORTEX_ROOT),
-    )
-    assert result.returncode == 0, f"build.py failed with empty tag:\n{result.stderr}"
+    """An empty tag value embeds an empty string for cortex_version without crashing."""
+    tarball = build(tag="", dist_dir=tmp_path)
+    assert tarball.exists()
 
     ievo_md = tmp_path / "iEVO.md"
     assert ievo_md.exists(), "dist/iEVO.md missing"
@@ -130,20 +116,7 @@ def test_qa_empty_tag_renders_empty_version_in_output(tmp_path: Path) -> None:
 
 def test_qa_tag_with_spaces_renders_into_version(tmp_path: Path) -> None:
     """A tag containing spaces is passed through to cortex_version without escaping issues."""
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(CORTEX_ROOT / "build.py"),
-            "--tag",
-            "v1.0 beta",
-            "--dist",
-            str(tmp_path),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(CORTEX_ROOT),
-    )
-    assert result.returncode == 0, f"build.py failed with spaced tag:\n{result.stderr}"
+    build(tag="v1.0 beta", dist_dir=tmp_path)
 
     ievo_md = tmp_path / "iEVO.md"
     content = ievo_md.read_text()
@@ -155,22 +128,7 @@ def test_qa_tag_with_spaces_renders_into_version(tmp_path: Path) -> None:
 def test_qa_tag_with_special_chars_renders_cleanly(tmp_path: Path) -> None:
     """A tag with special characters (+ # @) renders into cortex_version without Jinja2 errors."""
     special_tag = "v1.0.0+build.42"
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(CORTEX_ROOT / "build.py"),
-            "--tag",
-            special_tag,
-            "--dist",
-            str(tmp_path),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(CORTEX_ROOT),
-    )
-    assert result.returncode == 0, (
-        f"build.py failed with special-char tag:\n{result.stderr}"
-    )
+    build(tag=special_tag, dist_dir=tmp_path)
 
     ievo_md = tmp_path / "iEVO.md"
     content = ievo_md.read_text()
