@@ -8,10 +8,17 @@ from pathlib import Path
 import jinja2
 import typer
 
-from cortex.compile import build, validate_links
+from cortex.compile import CORTEX_ROOT, build, validate_links
 from cortex.version import __version__
 
 app = typer.Typer(name="cortex", help="Cortex kernel compilation CLI.")
+
+# NAMING HAZARD (S-4): `watch` is a CLI param on dev command — alias the fs_watch import
+# to avoid shadowing the local bool parameter. This import is module-level for mockability.
+try:
+    from watchfiles import watch as fs_watch
+except ImportError:
+    fs_watch = None  # type: ignore[assignment]
 
 
 @app.command()
@@ -50,6 +57,40 @@ def validate(
     rc = validate_links(Path(dist))
     if rc != 0:
         raise typer.Exit(code=rc)
+
+
+@app.command()
+def dev(
+    watch: bool = typer.Option(False, "--watch", help="Watch src/ for changes and recompile"),
+    dist: str = typer.Option("./dist", help="Output directory"),
+) -> None:
+    """Single compile for development. Use --watch to recompile on file changes.
+
+    Uses tag 'dev' (not __version__) for fast iteration. Does NOT validate links
+    (speed over correctness for dev workflow). Run `cortex compile` for a full build.
+    """
+    dist_path = Path(dist)
+    # Initial compile
+    build(tag="dev", dist_dir=dist_path)
+    print(f"Compiled to {dist_path}")
+
+    if not watch:
+        return
+
+    # NAMING HAZARD (S-4): `watch` is the bool param above — use `fs_watch` alias
+    if fs_watch is None:
+        print(
+            "Error: watchfiles not installed. Run: uv sync --extra dev",
+            file=sys.stderr,
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        for changes in fs_watch(CORTEX_ROOT / "src"):
+            print(f"Recompiling... {changes}")
+            build(tag="dev", dist_dir=dist_path)
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
