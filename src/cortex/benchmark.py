@@ -358,11 +358,21 @@ def parse_results(output_path: Path, provider_label: str = "with-kernel") -> Dim
     return DimensionScores.from_dict(scores)
 
 
-def append_run_log(naked: DimensionScores, kernel: DimensionScores) -> None:
-    """Append a run entry to the JSONL log file."""
+def append_run_log(
+    naked: DimensionScores,
+    kernel: DimensionScores,
+    run_type: str = "kernel",
+    extra: dict | None = None,
+) -> None:
+    """Append a run entry to the JSONL log file.
+
+    run_type: "kernel" (default), "agent", or "skill"
+    extra: additional fields to include (e.g. {"agent": "spec-writer"})
+    """
     RUNS_LOG.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
+    entry: dict = {
         "timestamp": now_iso(),
+        "type": run_type,
         "model": MODEL,
         "naked": naked.to_dict(),
         "naked_overall": naked.overall(),
@@ -370,6 +380,8 @@ def append_run_log(naked: DimensionScores, kernel: DimensionScores) -> None:
         "kernel_overall": kernel.overall(),
         "delta": kernel.overall() - naked.overall(),
     }
+    if extra:
+        entry.update(extra)
     with RUNS_LOG.open("a") as f:
         f.write(json.dumps(entry) + "\n")
 

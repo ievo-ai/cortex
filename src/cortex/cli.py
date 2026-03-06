@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 import jinja2
@@ -280,6 +281,110 @@ def compare(
 
     if not passed:
         raise typer.Exit(code=1)
+
+
+@benchmark_app.command()
+def agent(
+    overlay_path: str = typer.Argument(..., help="Path to agent overlay markdown file"),
+    dist: str = typer.Option("./dist", help="Directory with compiled iEVO.md"),
+) -> None:
+    """Run cognitive benchmark with a combined kernel + agent overlay system prompt.
+
+    Reads dist/iEVO.md + the overlay file, creates a temp combined prompt,
+    runs promptfoo eval, and stores scores under benchmarks/scores.json agents key.
+    """
+    from cortex.benchmark import (
+        AgentScores,
+        BenchmarkEntry,
+        ScoresFile,
+        append_run_log,
+        check_api_key,
+        check_promptfoo,
+        format_comparison_table,
+        load_scores,
+        now_iso,
+        parse_results,
+        run_promptfoo,
+        save_scores,
+        MODEL,
+        PROMPTFOO_CONFIG,
+    )
+    import yaml
+
+    try:
+        check_api_key()
+        check_promptfoo()
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise typer.Exit(code=1)
+
+    dist_ievo = Path(dist) / "iEVO.md"
+    if not dist_ievo.exists():
+        print(
+            "Error: dist/iEVO.md not found — run `cortex compile` first",
+            file=sys.stderr,
+        )
+        raise typer.Exit(code=1)
+
+    overlay = Path(overlay_path)
+    if not overlay.exists():
+        print(f"Error: overlay file not found: {overlay_path}", file=sys.stderr)
+        raise typer.Exit(code=1)
+
+    agent_name = overlay.stem  # e.g. "spec-writer" from "spec-writer.md"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+
+        # Build combined system prompt: kernel + separator + overlay
+        kernel_content = dist_ievo.read_text()
+        overlay_content = overlay.read_text()
+        combined = kernel_content + "\n\n---\n\n" + overlay_content
+        combined_prompt_file = tmp / "combined_prompt.md"
+        combined_prompt_file.write_text(combined)
+
+        # Load the base promptfoo config and inject the combined prompt
+        base_config = yaml.safe_load(PROMPTFOO_CONFIG.read_text())
+        for provider in base_config.get("providers", []):
+            if provider.get("label") == "with-kernel":
+                provider.setdefault("config", {})
+                provider["config"]["systemPrompt"] = f"file://{combined_prompt_file}"
+
+        tmp_config = tmp / "config.yaml"
+        tmp_config.write_text(yaml.dump(base_config, default_flow_style=False))
+
+        output_path = tmp / "output.json"
+        result = run_promptfoo(output_path, config_path=tmp_config)
+
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            print(f"Error: promptfoo eval failed (exit {result.returncode})", file=sys.stderr)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
+            raise typer.Exit(code=1)
+
+        naked = parse_results(output_path, provider_label="baseline")
+        kernel_with_overlay = parse_results(output_path, provider_label="with-kernel")
+
+    # Print comparison table
+    for line in format_comparison_table(naked, kernel_with_overlay):
+        print(line)
+    print(f"\n  Agent overlay: {overlay_path}")
+
+    # Append to run log with type + agent
+    append_run_log(naked, kernel_with_overlay, run_type="agent", extra={"agent": agent_name})
+
+    # Store scores
+    ts = now_iso()
+    agent_entry = BenchmarkEntry(
+        timestamp=ts, model=MODEL, kernel_version=None,
+        scores=kernel_with_overlay, overall=kernel_with_overlay.overall(),
+    )
+
+    existing = load_scores()
+    if existing is None:
+        existing = ScoresFile()
+    existing.agents[agent_name] = AgentScores(baseline=agent_entry, mutations=[])
+    save_scores(existing)
 
 
 if __name__ == "__main__":

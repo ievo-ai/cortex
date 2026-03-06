@@ -1,4 +1,4 @@
-"""Tests for cortex benchmark CLI commands (Task 026, subtask 03)."""
+"""Tests for cortex benchmark CLI commands (Task 026, subtask 03 + Task 028)."""
 
 from __future__ import annotations
 
@@ -236,3 +236,166 @@ def test_benchmark_compare_regression(fake_env: Path, monkeypatch: pytest.Monkey
     result = runner.invoke(app, ["benchmark", "compare", "--dist", str(fake_env)])
     assert result.exit_code == 1
     assert "REGRESSED" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Subtask 02: cortex benchmark agent
+# ---------------------------------------------------------------------------
+
+
+def _mock_agent_promptfoo_success(output_path: Path, config_path: Path | None = None) -> MagicMock:
+    """Fake run_promptfoo for agent benchmark (uses with-kernel provider label)."""
+    output_path.write_text(json.dumps({
+        "results": {
+            "results": [
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "structure_adherence"}, "success": True},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "challenge_reflex"}, "success": True},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "plan_first"}, "success": False},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "decision_logging"}, "success": True},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "ac_verification"}, "success": True},
+                {"provider": {"label": "with-kernel"}, "vars": {"dimension": "evolution_awareness"}, "success": False},
+            ]
+        }
+    }))
+    result = MagicMock()
+    result.returncode = 0
+    result.stderr = ""
+    return result
+
+
+@pytest.fixture()
+def fake_env_with_overlay(fake_env: Path, tmp_path: Path) -> tuple[Path, Path]:
+    """Extend fake_env with a compiled dist/iEVO.md and a fake overlay file."""
+    # dist/iEVO.md is already created by fake_env
+    overlay = tmp_path / "spec-writer.md"
+    overlay.write_text("# Spec Writer overlay\nAlways challenge first.")
+    return fake_env, overlay
+
+
+def test_benchmark_agent_help() -> None:
+    """cortex benchmark agent --help exits 0."""
+    result = runner.invoke(app, ["benchmark", "agent", "--help"])
+    assert result.exit_code == 0
+    assert "overlay" in result.output.lower() or "path" in result.output.lower()
+
+
+def test_benchmark_agent_missing_dist(fake_env_with_overlay: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exits 1 when dist/iEVO.md doesn't exist."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+
+    _, overlay = fake_env_with_overlay
+    result = runner.invoke(app, ["benchmark", "agent", str(overlay), "--dist", "/nonexistent/dist"])
+    assert result.exit_code == 1
+    assert "not found" in result.output.lower()
+
+
+def test_benchmark_agent_missing_overlay(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exits 1 when overlay file doesn't exist."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+
+    result = runner.invoke(app, ["benchmark", "agent", "/nonexistent/overlay.md", "--dist", str(fake_env)])
+    assert result.exit_code == 1
+    assert "overlay file not found" in result.output.lower()
+
+
+def test_benchmark_agent_runs_and_prints_table(
+    fake_env_with_overlay: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Successful run prints comparison table and agent overlay path."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+    monkeypatch.setattr(bm, "run_promptfoo", _mock_agent_promptfoo_success)
+
+    dist, overlay = fake_env_with_overlay
+    result = runner.invoke(app, ["benchmark", "agent", str(overlay), "--dist", str(dist)])
+
+    assert result.exit_code == 0, result.output
+    assert "Agent overlay:" in result.output
+    assert str(overlay) in result.output
+    # Comparison table columns
+    assert "Dimension" in result.output
+
+
+def test_benchmark_agent_stores_scores(
+    fake_env_with_overlay: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Agent run seeds baseline in scores.json under agents key."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+    monkeypatch.setattr(bm, "run_promptfoo", _mock_agent_promptfoo_success)
+
+    dist, overlay = fake_env_with_overlay
+    result = runner.invoke(app, ["benchmark", "agent", str(overlay), "--dist", str(dist)])
+    assert result.exit_code == 0
+
+    scores = bm.load_scores()
+    assert scores is not None
+    agent_name = overlay.stem  # "spec-writer"
+    assert agent_name in scores.agents
+    assert scores.agents[agent_name].baseline is not None
+    assert len(scores.agents[agent_name].mutations) == 0
+
+
+def test_benchmark_agent_appends_run_log(
+    fake_env_with_overlay: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Agent run appends to runs.jsonl with type=agent and agent=<name>."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+    monkeypatch.setattr(bm, "run_promptfoo", _mock_agent_promptfoo_success)
+
+    dist, overlay = fake_env_with_overlay
+    runner.invoke(app, ["benchmark", "agent", str(overlay), "--dist", str(dist)])
+
+    log_path = dist.parent / "runs.jsonl"
+    lines = log_path.read_text().strip().split("\n")
+    entry = json.loads(lines[-1])
+    assert entry.get("type") == "agent"
+    assert entry.get("agent") == overlay.stem
+
+
+def test_benchmark_agent_cleans_temp_files(
+    fake_env_with_overlay: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Temporary files are cleaned up after a successful run."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+    monkeypatch.setattr(bm, "run_promptfoo", _mock_agent_promptfoo_success)
+
+    import tempfile
+    temp_dirs_created: list[str] = []
+    original_tempdir = tempfile.TemporaryDirectory
+
+    class _TrackingTempDir:
+        def __init__(self) -> None:
+            self._real = original_tempdir()
+            temp_dirs_created.append(self._real.name)
+
+        def __enter__(self) -> "tempfile.TemporaryDirectory[str]":
+            return self._real.__enter__()
+
+        def __exit__(self, *args: object) -> None:
+            self._real.__exit__(*args)
+
+    import cortex.cli as cli_mod
+    monkeypatch.setattr(cli_mod.tempfile, "TemporaryDirectory", _TrackingTempDir)  # type: ignore[attr-defined]
+
+    dist, overlay = fake_env_with_overlay
+    runner.invoke(app, ["benchmark", "agent", str(overlay), "--dist", str(dist)])
+
+    # All tracked temp dirs should no longer exist (cleaned up)
+    import os
+    for td in temp_dirs_created:
+        assert not os.path.exists(td), f"Temp dir not cleaned up: {td}"
