@@ -56,12 +56,20 @@ cortex-<tag>.tar.gz
 ## Building locally
 
 ```bash
-python build.py --tag v1.0.0
-# Output: dist/cortex-v1.0.0.tar.gz
+uv run cortex compile
+# Output: dist/cortex-<version>.tar.gz
 ```
 
-Link validation (`validate_links()`) runs automatically in CI after the build.
-Locally, it is skipped if `lychee` is not on `PATH` — no action required for local builds.
+Version is auto-read from package metadata (CalVer) — no `--tag` argument needed.
+
+Link validation runs by default. Add `--skip-validate` for faster local builds when
+`lychee` is not installed:
+
+```bash
+uv run cortex compile --skip-validate
+```
+
+Link validation runs automatically in CI after the build.
 
 ## Running tests
 
