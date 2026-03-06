@@ -56,24 +56,79 @@ cortex-<tag>.tar.gz
 ## Building locally
 
 ```bash
-python build.py --tag v1.0.0
-# Output: dist/cortex-v1.0.0.tar.gz
+uv run cortex compile
+# Output: dist/cortex-<version>.tar.gz
 ```
 
-Link validation (`validate_links()`) runs automatically in CI after the build.
-Locally, it is skipped if `lychee` is not on `PATH` — no action required for local builds.
+Version is auto-read from package metadata (CalVer) — no `--tag` argument needed.
+
+Link validation runs by default. Add `--skip-validate` for faster local builds when
+`lychee` is not installed:
+
+```bash
+uv run cortex compile --skip-validate
+```
+
+Link validation runs automatically in CI after the build.
 
 ## Running tests
 
 ```bash
-pytest tests/
+uv run pytest tests/
+# With coverage:
+uv run pytest tests/ --cov
 ```
 
 ## Dependencies
 
-- `pyyaml` — YAML parsing for agent templates
-- `jinja2>=3.1` — template rendering for `src/kernel/iEVO.md.j2`
-- `lychee` — Markdown link validator (Rust binary, CI only — not a Python dependency)
+All dependencies are managed by uv — see `pyproject.toml` for the full list.
+Lychee (Markdown link validator) is a Rust binary used in CI only — not a Python dependency.
+
+## Contributing
+
+### Prerequisites
+
+- **uv** (required) — Python package manager and virtualenv tool:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- **lychee** (optional) — Markdown link validator. Only needed to run `cortex compile`
+  without `--skip-validate`. Link validation runs automatically in CI.
+
+### Quick start
+
+```bash
+git clone https://github.com/ievo-ai/cortex
+cd cortex
+uv sync --extra dev        # installs cortex + pytest + ruff + mypy + watchfiles
+uv run cortex dev --watch  # hot-reload on src/ template changes
+```
+
+Run tests:
+```bash
+uv run pytest tests/
+```
+
+### Godfather dev mode
+
+When developing cortex templates inside the godfather workspace, you can point
+`.ievo/iEVO.md` at the cortex build output so `cortex dev --watch` rebuilds are
+immediately picked up by godfather's context.
+
+From the **godfather root**:
+
+```bash
+# Point iEVO.md at cortex dev output (live rebuilds)
+ln -sf ../repos/cortex/dist/iEVO.md .ievo/iEVO.md
+
+# Restore (points back to CLI-distributed template)
+ln -sf ../repos/cli/src/ievo/marketplace/templates/iEVO.md .ievo/iEVO.md
+```
+
+Verify the symlink with:
+```bash
+ls -la .ievo/iEVO.md
+```
 
 ## Integration
 
