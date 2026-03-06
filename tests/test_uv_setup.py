@@ -83,10 +83,12 @@ def test_uv_lock_exists() -> None:
 
 
 def test_uv_lock_contains_cortex_entry() -> None:
-    """AC-3: uv.lock contains a cortex package entry (reproducible install)."""
+    """AC-3: uv.lock contains ievo-cortex package entry (reproducible install).
+    Package was renamed from 'cortex' to 'ievo-cortex' for PyPI (REQ-022 AC-1).
+    """
     content = (REPO_ROOT / "uv.lock").read_text()
-    assert 'name = "cortex"' in content, (
-        "uv.lock does not contain cortex package entry"
+    assert 'name = "ievo-cortex"' in content, (
+        "uv.lock does not contain ievo-cortex package entry"
     )
 
 
