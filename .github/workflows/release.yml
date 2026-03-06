@@ -54,10 +54,12 @@ jobs:
         run: lychee --offline --include-fragments --no-progress dist/
 
       - name: Build package
-        run: uv build
+        run: uv build --out-dir dist/pkg
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/pkg/
 
       - name: Create GitHub Release
         env:
