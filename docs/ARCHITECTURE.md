@@ -38,8 +38,9 @@ The `iEVO.md.j2` template accepts one variable:
 |----------|------|--------|---------|
 | `cortex_version` | string | CLI `__version__` or `"dev"` literal | `"26.03.06.1200"` |
 
-The `.yaml` sources under `agents/` and `skills/` are loaded by `build_claude_target()`
-(and future provider targets) to render provider-specific artifact files.
+The `.yaml` sources under `agents/` and `skills/` define the canonical agent/skill data.
+In v1, `build_claude_target()` uses a hardcoded template string (`CLAUDE_AGENT_MD`);
+future versions will load these YAML sources directly.
 
 ## 4. Compile Pipeline
 
@@ -49,9 +50,9 @@ Data flow through the compile pipeline:
 src/kernel/iEVO.md.j2
   └──render_template()──► dist/iEVO.md          (provider-agnostic, tarball root)
 
-src/agents/*.yaml
-src/skills/*.yaml
+CLAUDE_AGENT_MD (hardcoded v1)
   └──build_claude_target()──► dist/claude/agents/*.md   (Claude Code format)
+(placeholder)
   └──build_codex_target()──►  dist/codex/BUILD_TARGET.md (placeholder, IDEA-005)
 
 dist/iEVO.md
