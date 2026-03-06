@@ -74,7 +74,9 @@ Link validation runs automatically in CI after the build.
 ## Running tests
 
 ```bash
-pytest tests/
+uv run pytest tests/
+# With coverage:
+uv run pytest tests/ --cov
 ```
 
 ## Dependencies
