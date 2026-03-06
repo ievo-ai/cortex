@@ -116,7 +116,7 @@ def run(
         BenchmarkEntry,
         ScoresFile,
         append_run_log,
-        check_ollama,
+        check_api_key,
         check_promptfoo,
         format_comparison_table,
         load_scores,
@@ -128,7 +128,7 @@ def run(
     )
 
     try:
-        check_ollama()
+        check_api_key()
         check_promptfoo()
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -204,7 +204,7 @@ def compare(
         BenchmarkEntry,
         ScoresFile,
         append_run_log,
-        check_ollama,
+        check_api_key,
         check_promptfoo,
         compare_scores,
         format_comparison_table,
@@ -217,7 +217,7 @@ def compare(
     )
 
     try:
-        check_ollama()
+        check_api_key()
         check_promptfoo()
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)

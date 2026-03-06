@@ -47,7 +47,7 @@ def test_dimension_scores_roundtrip() -> None:
 def test_benchmark_entry_roundtrip() -> None:
     entry = BenchmarkEntry(
         timestamp="2026-03-06T12:00:00+00:00",
-        model="qwen2.5:7b",
+        model="claude-haiku-4-5-20251001",
         kernel_version=None,
         scores=DimensionScores(structure_adherence=0.3),
         overall=0.05,
@@ -122,7 +122,7 @@ def test_scores_file_with_mutations() -> None:
 def test_scores_file_roundtrip() -> None:
     sf = ScoresFile(
         baseline=BenchmarkEntry(
-            timestamp="2026-03-06T12:00:00+00:00", model="qwen2.5:7b",
+            timestamp="2026-03-06T12:00:00+00:00", model="claude-haiku-4-5-20251001",
             kernel_version=None, scores=DimensionScores(structure_adherence=0.3),
             overall=0.05,
         ),
@@ -193,7 +193,7 @@ def test_scores_json_valid_format(tmp_path: Path, monkeypatch: object) -> None:
 
     sf = ScoresFile(
         baseline=BenchmarkEntry(
-            timestamp=now_iso(), model="qwen2.5:7b", kernel_version=None,
+            timestamp=now_iso(), model="claude-haiku-4-5-20251001", kernel_version=None,
             scores=DimensionScores(), overall=0.0,
         ),
     )
@@ -203,7 +203,7 @@ def test_scores_json_valid_format(tmp_path: Path, monkeypatch: object) -> None:
     assert "baseline" in data
     assert "mutations" in data
     assert data["baseline"]["kernel_version"] is None
-    assert data["baseline"]["model"] == "qwen2.5:7b"
+    assert data["baseline"]["model"] == "claude-haiku-4-5-20251001"
     for dim in ["structure_adherence", "challenge_reflex", "plan_first",
                 "decision_logging", "ac_verification", "evolution_awareness"]:
         assert dim in data["baseline"]["scores"]

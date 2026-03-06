@@ -24,9 +24,7 @@ RUNS_LOG = BENCHMARKS_DIR / "runs.jsonl"
 PROMPTFOO_CONFIG = BENCHMARKS_DIR / "promptfooconfig.yaml"
 DIST_IEVO_MD = CORTEX_ROOT / "dist" / "iEVO.md"
 
-OLLAMA_HOST = "localhost"
-OLLAMA_PORT = 11434
-MODEL = "qwen2.5:7b"
+MODEL = "claude-haiku-4-5-20251001"
 
 DIMENSIONS = [
     "structure_adherence",
@@ -174,25 +172,27 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def check_ollama() -> None:
-    """Check that Ollama is reachable. Raises RuntimeError if not."""
-    import urllib.request
-    import urllib.error
+def _load_env() -> None:
+    """Load .env file into os.environ if it exists."""
+    import os
 
-    url = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/api/tags"
-    try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
-            data = json.loads(resp.read())
-            model_names = [m.get("name", "") for m in data.get("models", [])]
-            # Check if model is pulled (match with or without tag)
-            found = any(MODEL in name for name in model_names)
-            if not found:
-                raise RuntimeError(
-                    f"Model {MODEL} not found — pull with: ollama pull {MODEL}"
-                )
-    except urllib.error.URLError:
+    env_file = CORTEX_ROOT / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+
+
+def check_api_key() -> None:
+    """Check that ANTHROPIC_API_KEY is set. Raises RuntimeError if not."""
+    import os
+
+    _load_env()
+    if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError(
-            f"Ollama not reachable at {OLLAMA_HOST}:{OLLAMA_PORT} — start with: ollama serve"
+            "ANTHROPIC_API_KEY not set — add it to .env or export it"
         )
 
 
@@ -216,6 +216,9 @@ def run_promptfoo(output_path: Path) -> subprocess.CompletedProcess:
     """Run promptfoo eval and write JSON output."""
     if not PROMPTFOO_CONFIG.exists():
         raise FileNotFoundError(f"Config not found: {PROMPTFOO_CONFIG}")
+
+    # Ensure .env is loaded (check_api_key does this, but be safe)
+    _load_env()
 
     cmd = [
         "promptfoo", "eval",

@@ -65,7 +65,7 @@ def test_benchmark_run_seeds_baseline(fake_env: Path, monkeypatch: pytest.Monkey
     """First run seeds baseline and shows comparison table."""
     import cortex.benchmark as bm
 
-    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
     monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
 
@@ -91,7 +91,7 @@ def test_benchmark_run_updates_existing(fake_env: Path, monkeypatch: pytest.Monk
     """Second run updates scores."""
     import cortex.benchmark as bm
 
-    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
     monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
 
@@ -112,7 +112,7 @@ def test_benchmark_run_appends_log(fake_env: Path, monkeypatch: pytest.MonkeyPat
     """Each run appends to runs.jsonl."""
     import cortex.benchmark as bm
 
-    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
     monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
 
@@ -132,7 +132,7 @@ def test_benchmark_run_missing_dist(fake_env: Path, monkeypatch: pytest.MonkeyPa
     """Exits 1 when dist/iEVO.md doesn't exist."""
     import cortex.benchmark as bm
 
-    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
 
     result = runner.invoke(app, ["benchmark", "run", "--dist", str(fake_env / "nonexistent")])
@@ -140,25 +140,25 @@ def test_benchmark_run_missing_dist(fake_env: Path, monkeypatch: pytest.MonkeyPa
     assert "not found" in result.output
 
 
-def test_benchmark_run_ollama_down(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Exits 1 when Ollama is not reachable."""
+def test_benchmark_run_no_api_key(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exits 1 when ANTHROPIC_API_KEY is not set."""
     import cortex.benchmark as bm
 
     def _raise(*a, **kw):
-        raise RuntimeError("Ollama not reachable")
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
 
-    monkeypatch.setattr(bm, "check_ollama", _raise)
+    monkeypatch.setattr(bm, "check_api_key", _raise)
 
     result = runner.invoke(app, ["benchmark", "run", "--dist", str(fake_env)])
     assert result.exit_code == 1
-    assert "Ollama not reachable" in result.output
+    assert "ANTHROPIC_API_KEY not set" in result.output
 
 
 def test_benchmark_run_promptfoo_fail(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Exits 1 when promptfoo eval fails (no output file written)."""
     import cortex.benchmark as bm
 
-    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
 
     def _fail_promptfoo(p: Path) -> MagicMock:
@@ -184,7 +184,7 @@ def test_benchmark_compare_seeds_on_first_run(fake_env: Path, monkeypatch: pytes
     """First compare run seeds baseline, exits 0."""
     import cortex.benchmark as bm
 
-    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
     monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
 
@@ -197,7 +197,7 @@ def test_benchmark_compare_passes(fake_env: Path, monkeypatch: pytest.MonkeyPatc
     """Compare passes when current >= baseline."""
     import cortex.benchmark as bm
 
-    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
     monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
 
@@ -218,7 +218,7 @@ def test_benchmark_compare_regression(fake_env: Path, monkeypatch: pytest.Monkey
     """Compare exits 1 on regression."""
     import cortex.benchmark as bm
 
-    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
     monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
 

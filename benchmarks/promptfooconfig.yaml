@@ -11,19 +11,22 @@ prompts:
 
 providers:
   # Provider A: baseline — naked LLM, no system prompt
-  - id: ollama:chat:qwen2.5:7b
+  - id: anthropic:messages:claude-haiku-4-5-20251001
     label: baseline
+    config:
+      temperature: 0
 
   # Provider B: with kernel — iEVO.md as system prompt
-  - id: ollama:chat:qwen2.5:7b
+  - id: anthropic:messages:claude-haiku-4-5-20251001
     label: with-kernel
     config:
+      temperature: 0
       systemPrompt: "file://dist/iEVO.md"
 
-# Default test options — use local Qwen as grader for llm-rubric assertions
+# Default test options — use Haiku as grader for llm-rubric assertions
 defaultTest:
   options:
-    provider: ollama:chat:qwen2.5:7b
+    provider: anthropic:messages:claude-haiku-4-5-20251001
 
 tests:
   # --- Dimension: structure_adherence ---
