@@ -128,16 +128,80 @@ class MutationEntry:
 
 
 @dataclass
+class SkillBenchmarkEntry:
+    timestamp: str
+    model: str
+    scores: dict[str, float]
+    overall: float
+
+    def to_dict(self) -> dict:
+        return {
+            "timestamp": self.timestamp,
+            "model": self.model,
+            "scores": self.scores,
+            "overall": self.overall,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> SkillBenchmarkEntry:
+        return cls(
+            timestamp=d.get("timestamp", ""),
+            model=d.get("model", MODEL),
+            scores=d.get("scores", {}),
+            overall=d.get("overall", 0.0),
+        )
+
+
+@dataclass
+class SkillScores:
+    baseline: SkillBenchmarkEntry | None = None
+    mutations: list = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "baseline": self.baseline.to_dict() if self.baseline else None,
+            "mutations": self.mutations,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> SkillScores:
+        baseline = SkillBenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
+        return cls(baseline=baseline, mutations=d.get("mutations", []))
+
+
+@dataclass
+class AgentScores:
+    baseline: BenchmarkEntry | None = None
+    mutations: list[MutationEntry] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "baseline": self.baseline.to_dict() if self.baseline else None,
+            "mutations": [m.to_dict() for m in self.mutations],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> AgentScores:
+        baseline = BenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
+        mutations = [MutationEntry.from_dict(m) for m in d.get("mutations", [])]
+        return cls(baseline=baseline, mutations=mutations)
+
+
+@dataclass
 class ScoresFile:
     naked: BenchmarkEntry | None = None
     baseline: BenchmarkEntry | None = None
     mutations: list[MutationEntry] = field(default_factory=list)
+    agents: dict[str, AgentScores] = field(default_factory=dict)
+    skills: dict[str, SkillScores] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
             "naked": self.naked.to_dict() if self.naked else None,
             "baseline": self.baseline.to_dict() if self.baseline else None,
             "mutations": [m.to_dict() for m in self.mutations],
+            "agents": {name: ag.to_dict() for name, ag in self.agents.items()},
+            "skills": {name: sk.to_dict() for name, sk in self.skills.items()},
         }
 
     @classmethod
@@ -145,7 +209,9 @@ class ScoresFile:
         naked = BenchmarkEntry.from_dict(d["naked"]) if d.get("naked") else None
         baseline = BenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
         mutations = [MutationEntry.from_dict(m) for m in d.get("mutations", [])]
-        return cls(naked=naked, baseline=baseline, mutations=mutations)
+        agents = {name: AgentScores.from_dict(v) for name, v in d.get("agents", {}).items()}
+        skills = {name: SkillScores.from_dict(v) for name, v in d.get("skills", {}).items()}
+        return cls(naked=naked, baseline=baseline, mutations=mutations, agents=agents, skills=skills)
 
     def last_accepted_overall(self) -> float | None:
         accepted = [m for m in self.mutations if m.status == "accepted"]
@@ -212,17 +278,25 @@ def check_promptfoo() -> str:
     )
 
 
-def run_promptfoo(output_path: Path) -> subprocess.CompletedProcess:
-    """Run promptfoo eval and write JSON output."""
-    if not PROMPTFOO_CONFIG.exists():
-        raise FileNotFoundError(f"Config not found: {PROMPTFOO_CONFIG}")
+def run_promptfoo(
+    output_path: Path,
+    config_path: Path | None = None,
+) -> subprocess.CompletedProcess:
+    """Run promptfoo eval and write JSON output.
+
+    config_path: optional override for the promptfoo config file.
+    When None, uses PROMPTFOO_CONFIG (default kernel benchmark config).
+    """
+    effective_config = config_path if config_path is not None else PROMPTFOO_CONFIG
+    if not effective_config.exists():
+        raise FileNotFoundError(f"Config not found: {effective_config}")
 
     # Ensure .env is loaded (check_api_key does this, but be safe)
     _load_env()
 
     cmd = [
         "promptfoo", "eval",
-        "--config", str(PROMPTFOO_CONFIG),
+        "--config", str(effective_config),
         "--output", str(output_path),
         "--no-progress-bar",
         "--no-cache",
@@ -342,3 +416,56 @@ def compare_scores(
         messages.append(f"  REGRESSED ({delta:.2f})")
 
     return passed, messages
+
+
+# ---------------------------------------------------------------------------
+# Skill benchmark helpers
+# ---------------------------------------------------------------------------
+
+def parse_skill_results(output_path: Path) -> tuple[dict[str, float], float]:
+    """Parse promptfoo JSON output for skill benchmarks.
+
+    Returns (scores_by_test, overall) where scores_by_test maps test
+    description to pass rate and overall is the mean across all tests.
+    """
+    data = json.loads(output_path.read_text())
+    results = data.get("results", data)
+    test_results = results.get("results", [])
+
+    # Group by description
+    passes_by_test: dict[str, list[bool]] = {}
+    for test in test_results:
+        desc = test.get("description", "unknown")
+        if desc not in passes_by_test:
+            passes_by_test[desc] = []
+        passes_by_test[desc].append(test.get("success", False))
+
+    scores: dict[str, float] = {}
+    for desc, passes in passes_by_test.items():
+        scores[desc] = sum(passes) / len(passes) if passes else 0.0
+
+    overall = sum(scores.values()) / len(scores) if scores else 0.0
+    return scores, overall
+
+
+# Keyword map for dimension inference
+_DIMENSION_KEYWORDS: dict[str, list[str]] = {
+    "challenge_reflex": ["challenge", "question", "push back", "clarif", "ambig", "verify request"],
+    "plan_first": ["plan", "plan first", "outline", "decompose", "blueprint"],
+    "decision_logging": ["decision", "log", "rationale", "why", "record why", "document"],
+    "ac_verification": ["acceptance", "ac-", "criteria", "verify ac", "check ac"],
+    "structure_adherence": ["structure", "format", "template", "naming", "convention", "yaml"],
+    "evolution_awareness": ["evolution", "evolve", "lesson", "learn", "improve", "tech debt"],
+}
+
+
+def infer_dimension(rule_text: str) -> str:
+    """Infer the most relevant cognitive dimension from rule text.
+
+    Uses keyword matching. Falls back to 'structure_adherence' if no match.
+    """
+    lower = rule_text.lower()
+    for dim, keywords in _DIMENSION_KEYWORDS.items():
+        if any(kw in lower for kw in keywords):
+            return dim
+    return "structure_adherence"

@@ -1,4 +1,4 @@
-"""Tests for cortex cognitive benchmark module (Task 026)."""
+"""Tests for cortex cognitive benchmark module (Task 026 + 028)."""
 
 from __future__ import annotations
 
@@ -6,13 +6,19 @@ import json
 from pathlib import Path
 
 from cortex.benchmark import (
+    AgentScores,
     BenchmarkEntry,
     DimensionScores,
     MutationEntry,
     ScoresFile,
+    SkillBenchmarkEntry,
+    SkillScores,
     compare_scores,
+    infer_dimension,
     load_scores,
     now_iso,
+    parse_skill_results,
+    run_promptfoo,
     save_scores,
 )
 
@@ -209,3 +215,223 @@ def test_scores_json_valid_format(tmp_path: Path, monkeypatch: object) -> None:
         assert dim in data["baseline"]["scores"]
         val = data["baseline"]["scores"][dim]
         assert 0.0 <= val <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# Subtask 01: New dataclasses (AgentScores, SkillBenchmarkEntry, SkillScores)
+# ---------------------------------------------------------------------------
+
+
+def test_skill_benchmark_entry_roundtrip() -> None:
+    """SkillBenchmarkEntry: flat dict scores + overall."""
+    entry = SkillBenchmarkEntry(
+        timestamp="2026-03-06T12:00:00+00:00",
+        model="claude-haiku-4-5-20251001",
+        scores={"test_delegates": 1.0, "test_format": 0.0},
+        overall=0.5,
+    )
+    d = entry.to_dict()
+    restored = SkillBenchmarkEntry.from_dict(d)
+    assert restored.model == "claude-haiku-4-5-20251001"
+    assert restored.scores == {"test_delegates": 1.0, "test_format": 0.0}
+    assert restored.overall == 0.5
+
+
+def test_skill_scores_roundtrip() -> None:
+    """SkillScores: baseline + mutations list."""
+    ss = SkillScores(
+        baseline=SkillBenchmarkEntry(
+            timestamp="t", model="m",
+            scores={"test_a": 1.0}, overall=1.0,
+        ),
+        mutations=[],
+    )
+    d = ss.to_dict()
+    restored = SkillScores.from_dict(d)
+    assert restored.baseline is not None
+    assert restored.baseline.overall == 1.0
+    assert restored.mutations == []
+
+
+def test_skill_scores_empty() -> None:
+    ss = SkillScores()
+    assert ss.baseline is None
+    assert ss.mutations == []
+
+
+def test_agent_scores_roundtrip() -> None:
+    """AgentScores: baseline (BenchmarkEntry) + mutations list."""
+    entry = BenchmarkEntry(
+        timestamp="t", model="m", kernel_version=None,
+        scores=DimensionScores(plan_first=0.7), overall=0.12,
+    )
+    ag = AgentScores(baseline=entry, mutations=[])
+    d = ag.to_dict()
+    restored = AgentScores.from_dict(d)
+    assert restored.baseline is not None
+    assert restored.baseline.scores.plan_first == 0.7
+    assert restored.mutations == []
+
+
+def test_agent_scores_empty() -> None:
+    ag = AgentScores()
+    assert ag.baseline is None
+    assert ag.mutations == []
+
+
+def test_scores_file_with_agents_and_skills(tmp_path: Path, monkeypatch: object) -> None:
+    """ScoresFile.to_dict() / from_dict() round-trips agents + skills."""
+    import cortex.benchmark as bm
+    scores_path = tmp_path / "scores.json"
+    monkeypatch.setattr(bm, "SCORES_FILE", scores_path)
+
+    sf = ScoresFile(
+        agents={
+            "spec-writer": AgentScores(
+                baseline=BenchmarkEntry(
+                    timestamp="t", model="m", kernel_version=None,
+                    scores=DimensionScores(), overall=0.33,
+                ),
+                mutations=[],
+            )
+        },
+        skills={
+            "ievo": SkillScores(
+                baseline=SkillBenchmarkEntry(
+                    timestamp="t", model="m",
+                    scores={"test_delegates": 1.0}, overall=1.0,
+                ),
+                mutations=[],
+            )
+        },
+    )
+    save_scores(sf)
+
+    data = json.loads(scores_path.read_text())
+    assert "agents" in data
+    assert "spec-writer" in data["agents"]
+    assert data["agents"]["spec-writer"]["baseline"]["overall"] == 0.33
+    assert "skills" in data
+    assert "ievo" in data["skills"]
+    assert data["skills"]["ievo"]["baseline"]["overall"] == 1.0
+
+    loaded = load_scores()
+    assert loaded is not None
+    assert loaded.agents["spec-writer"].baseline is not None
+    assert loaded.skills["ievo"].baseline is not None
+
+
+def test_scores_file_backward_compatible(tmp_path: Path, monkeypatch: object) -> None:
+    """Loading old scores.json without agents/skills keys must not fail."""
+    import cortex.benchmark as bm
+    scores_path = tmp_path / "scores.json"
+    monkeypatch.setattr(bm, "SCORES_FILE", scores_path)
+
+    # Old-format scores.json (no agents/skills keys)
+    scores_path.write_text(json.dumps({
+        "naked": None,
+        "baseline": None,
+        "mutations": [],
+    }))
+
+    loaded = load_scores()
+    assert loaded is not None
+    assert loaded.agents == {}
+    assert loaded.skills == {}
+
+
+def test_run_promptfoo_uses_custom_config(tmp_path: Path, monkeypatch: object) -> None:
+    """run_promptfoo() accepts optional config_path; uses it instead of PROMPTFOO_CONFIG."""
+    import subprocess
+    import cortex.benchmark as bm
+
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> object:
+        calls.append(cmd)
+        result = object.__new__(subprocess.CompletedProcess)
+        result.__dict__.update({"args": cmd, "returncode": 0, "stdout": "", "stderr": ""})
+        return result
+
+    monkeypatch.setattr(bm, "_load_env", lambda: None)
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    custom_config = tmp_path / "custom.yaml"
+    custom_config.write_text("description: test")
+    output = tmp_path / "out.json"
+
+    run_promptfoo(output, config_path=custom_config)
+
+    # The custom config path must appear in the command
+    assert any(str(custom_config) in arg for arg in calls[0])
+
+
+def test_run_promptfoo_default_config(tmp_path: Path, monkeypatch: object) -> None:
+    """run_promptfoo() without config_path uses PROMPTFOO_CONFIG."""
+    import subprocess
+    import cortex.benchmark as bm
+
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> object:
+        calls.append(cmd)
+        result = object.__new__(subprocess.CompletedProcess)
+        result.__dict__.update({"args": cmd, "returncode": 0, "stdout": "", "stderr": ""})
+        return result
+
+    default_config = tmp_path / "promptfooconfig.yaml"
+    default_config.write_text("description: default")
+    monkeypatch.setattr(bm, "PROMPTFOO_CONFIG", default_config)
+    monkeypatch.setattr(bm, "_load_env", lambda: None)
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    output = tmp_path / "out.json"
+    run_promptfoo(output)
+
+    assert any(str(default_config) in arg for arg in calls[0])
+
+
+# ---------------------------------------------------------------------------
+# Subtask 01: parse_skill_results + infer_dimension
+# ---------------------------------------------------------------------------
+
+
+def test_parse_skill_results() -> None:
+    """parse_skill_results() computes per-test pass rate from promptfoo output."""
+    output = {
+        "results": {
+            "results": [
+                {"description": "test_delegates", "success": True},
+                {"description": "test_format", "success": False},
+                {"description": "test_format", "success": True},
+            ]
+        }
+    }
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(output, f)
+        p = Path(f.name)
+
+    scores, overall = parse_skill_results(p)
+    p.unlink(missing_ok=True)
+
+    assert scores["test_delegates"] == 1.0
+    assert abs(scores["test_format"] - 0.5) < 0.001
+    assert abs(overall - 0.75) < 0.001  # (1.0 + 0.5) / 2 = 0.75
+
+
+def test_infer_dimension_known_keywords() -> None:
+    """infer_dimension() maps keywords to known dimension names."""
+    assert infer_dimension("always challenge user input before executing") == "challenge_reflex"
+    assert infer_dimension("plan before you code") == "plan_first"
+    assert infer_dimension("log every decision with rationale") == "decision_logging"
+    assert infer_dimension("always verify acceptance criteria") == "ac_verification"
+    assert infer_dimension("maintain consistent structure and format") == "structure_adherence"
+    assert infer_dimension("record lessons and evolve") == "evolution_awareness"
+
+
+def test_infer_dimension_fallback() -> None:
+    """infer_dimension() returns a default when no keyword matches."""
+    result = infer_dimension("something completely unrelated")
+    from cortex.benchmark import DIMENSIONS
+    assert result in DIMENSIONS
