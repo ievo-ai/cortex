@@ -18,3 +18,6 @@ htmlcov/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# Benchmark run log (local, append-only)
+benchmarks/runs.jsonl

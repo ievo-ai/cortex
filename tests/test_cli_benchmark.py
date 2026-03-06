@@ -23,24 +23,24 @@ def fake_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     import cortex.benchmark as bm
     monkeypatch.setattr(bm, "SCORES_FILE", tmp_path / "scores.json")
+    monkeypatch.setattr(bm, "RUNS_LOG", tmp_path / "runs.jsonl")
 
     return dist
 
 
 def _mock_promptfoo_success(output_path: Path) -> MagicMock:
     """Create a fake promptfoo result that writes valid JSON output."""
-    # Write a fake promptfoo output file — include both providers like real promptfoo
     output_path.write_text(json.dumps({
         "results": {
             "results": [
-                # baseline provider results (should be ignored by parse_results)
+                # baseline (naked) — mostly fails
                 {"provider": {"label": "baseline"}, "vars": {"dimension": "structure_adherence"}, "success": False},
                 {"provider": {"label": "baseline"}, "vars": {"dimension": "challenge_reflex"}, "success": False},
                 {"provider": {"label": "baseline"}, "vars": {"dimension": "plan_first"}, "success": False},
-                {"provider": {"label": "baseline"}, "vars": {"dimension": "decision_logging"}, "success": False},
+                {"provider": {"label": "baseline"}, "vars": {"dimension": "decision_logging"}, "success": True},
                 {"provider": {"label": "baseline"}, "vars": {"dimension": "ac_verification"}, "success": False},
                 {"provider": {"label": "baseline"}, "vars": {"dimension": "evolution_awareness"}, "success": False},
-                # with-kernel provider results (these are what we score)
+                # with-kernel — better scores
                 {"provider": {"label": "with-kernel"}, "vars": {"dimension": "structure_adherence"}, "success": True},
                 {"provider": {"label": "with-kernel"}, "vars": {"dimension": "challenge_reflex"}, "success": True},
                 {"provider": {"label": "with-kernel"}, "vars": {"dimension": "plan_first"}, "success": False},
@@ -62,7 +62,7 @@ def _mock_promptfoo_success(output_path: Path) -> MagicMock:
 
 
 def test_benchmark_run_seeds_baseline(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """First run seeds baseline scores."""
+    """First run seeds baseline and shows comparison table."""
     import cortex.benchmark as bm
 
     monkeypatch.setattr(bm, "check_ollama", lambda: None)
@@ -72,23 +72,30 @@ def test_benchmark_run_seeds_baseline(fake_env: Path, monkeypatch: pytest.Monkey
     result = runner.invoke(app, ["benchmark", "run", "--dist", str(fake_env)])
     assert result.exit_code == 0
     assert "Baseline seeded" in result.output
+    assert "Naked" in result.output
+    assert "Kernel" in result.output
 
     scores = bm.load_scores()
     assert scores is not None
     assert scores.baseline is not None
+    assert scores.naked is not None
+    # Kernel scores
     assert scores.baseline.scores.structure_adherence == 1.0
     assert scores.baseline.scores.plan_first == 0.0
+    # Naked scores
+    assert scores.naked.scores.structure_adherence == 0.0
+    assert scores.naked.scores.decision_logging == 1.0
 
 
 def test_benchmark_run_updates_existing(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Second run updates baseline scores."""
+    """Second run updates scores."""
     import cortex.benchmark as bm
 
     monkeypatch.setattr(bm, "check_ollama", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
     monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
 
-    # Seed initial baseline
+    # Seed initial
     from cortex.benchmark import BenchmarkEntry, DimensionScores, ScoresFile
     sf = ScoresFile(baseline=BenchmarkEntry(
         timestamp="t", model="m", kernel_version=None,
@@ -99,6 +106,26 @@ def test_benchmark_run_updates_existing(fake_env: Path, monkeypatch: pytest.Monk
     result = runner.invoke(app, ["benchmark", "run", "--dist", str(fake_env)])
     assert result.exit_code == 0
     assert "Scores updated" in result.output
+
+
+def test_benchmark_run_appends_log(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each run appends to runs.jsonl."""
+    import cortex.benchmark as bm
+
+    monkeypatch.setattr(bm, "check_ollama", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+    monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
+
+    runner.invoke(app, ["benchmark", "run", "--dist", str(fake_env)])
+    runner.invoke(app, ["benchmark", "run", "--dist", str(fake_env)])
+
+    log_path = fake_env.parent / "runs.jsonl"
+    lines = log_path.read_text().strip().split("\n")
+    assert len(lines) == 2
+    entry = json.loads(lines[0])
+    assert "naked" in entry
+    assert "kernel" in entry
+    assert "delta" in entry
 
 
 def test_benchmark_run_missing_dist(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,7 +162,6 @@ def test_benchmark_run_promptfoo_fail(fake_env: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
 
     def _fail_promptfoo(p: Path) -> MagicMock:
-        # Don't write output file — simulates real failure
         p.unlink(missing_ok=True)
         r = MagicMock()
         r.returncode = 1
@@ -196,7 +222,7 @@ def test_benchmark_compare_regression(fake_env: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
     monkeypatch.setattr(bm, "run_promptfoo", lambda p: _mock_promptfoo_success(p))
 
-    # Seed a high baseline — mock scores will be lower
+    # Seed a high baseline — mock kernel scores will be lower (overall ~0.67)
     from cortex.benchmark import BenchmarkEntry, DimensionScores, ScoresFile
     sf = ScoresFile(baseline=BenchmarkEntry(
         timestamp="t", model="m", kernel_version=None,

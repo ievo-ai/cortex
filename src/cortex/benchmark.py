@@ -20,6 +20,7 @@ from cortex.compile import CORTEX_ROOT
 
 BENCHMARKS_DIR = CORTEX_ROOT / "benchmarks"
 SCORES_FILE = BENCHMARKS_DIR / "scores.json"
+RUNS_LOG = BENCHMARKS_DIR / "runs.jsonl"
 PROMPTFOO_CONFIG = BENCHMARKS_DIR / "promptfooconfig.yaml"
 DIST_IEVO_MD = CORTEX_ROOT / "dist" / "iEVO.md"
 
@@ -130,20 +131,23 @@ class MutationEntry:
 
 @dataclass
 class ScoresFile:
+    naked: BenchmarkEntry | None = None
     baseline: BenchmarkEntry | None = None
     mutations: list[MutationEntry] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
+            "naked": self.naked.to_dict() if self.naked else None,
             "baseline": self.baseline.to_dict() if self.baseline else None,
             "mutations": [m.to_dict() for m in self.mutations],
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> ScoresFile:
+        naked = BenchmarkEntry.from_dict(d["naked"]) if d.get("naked") else None
         baseline = BenchmarkEntry.from_dict(d["baseline"]) if d.get("baseline") else None
         mutations = [MutationEntry.from_dict(m) for m in d.get("mutations", [])]
-        return cls(baseline=baseline, mutations=mutations)
+        return cls(naked=naked, baseline=baseline, mutations=mutations)
 
     def last_accepted_overall(self) -> float | None:
         accepted = [m for m in self.mutations if m.status == "accepted"]
@@ -275,6 +279,42 @@ def parse_results(output_path: Path, provider_label: str = "with-kernel") -> Dim
         scores[dim] = sum(passes) / len(passes) if passes else 0.0
 
     return DimensionScores.from_dict(scores)
+
+
+def append_run_log(naked: DimensionScores, kernel: DimensionScores) -> None:
+    """Append a run entry to the JSONL log file."""
+    RUNS_LOG.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "timestamp": now_iso(),
+        "model": MODEL,
+        "naked": naked.to_dict(),
+        "naked_overall": naked.overall(),
+        "kernel": kernel.to_dict(),
+        "kernel_overall": kernel.overall(),
+        "delta": kernel.overall() - naked.overall(),
+    }
+    with RUNS_LOG.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def format_comparison_table(naked: DimensionScores, kernel: DimensionScores) -> list[str]:
+    """Format a side-by-side comparison table. Returns lines."""
+    lines = []
+    lines.append(f"  {'Dimension':<25} {'Naked':>8} {'Kernel':>8} {'Delta':>8}")
+    lines.append(f"  {'-' * 53}")
+    for dim in DIMENSIONS:
+        n = getattr(naked, dim)
+        k = getattr(kernel, dim)
+        d = k - n
+        sign = "+" if d >= 0 else ""
+        lines.append(f"  {dim:<25} {n:>8.2f} {k:>8.2f} {sign}{d:>7.2f}")
+    lines.append(f"  {'-' * 53}")
+    no = naked.overall()
+    ko = kernel.overall()
+    d = ko - no
+    sign = "+" if d >= 0 else ""
+    lines.append(f"  {'overall':<25} {no:>8.2f} {ko:>8.2f} {sign}{d:>7.2f}")
+    return lines
 
 
 def compare_scores(

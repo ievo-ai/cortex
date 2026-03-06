@@ -115,8 +115,10 @@ def run(
     from cortex.benchmark import (
         BenchmarkEntry,
         ScoresFile,
+        append_run_log,
         check_ollama,
         check_promptfoo,
+        format_comparison_table,
         load_scores,
         now_iso,
         parse_results,
@@ -155,31 +157,38 @@ def run(
                 print(result.stderr, file=sys.stderr)
         raise typer.Exit(code=1)
 
-    scores = parse_results(output_path)
+    naked = parse_results(output_path, provider_label="baseline")
+    kernel = parse_results(output_path, provider_label="with-kernel")
     output_path.unlink(missing_ok=True)
+
+    # Log every run
+    append_run_log(naked, kernel)
+
+    # Print comparison table
+    for line in format_comparison_table(naked, kernel):
+        print(line)
+
+    # Save scores
+    ts = now_iso()
+    naked_entry = BenchmarkEntry(
+        timestamp=ts, model=MODEL, kernel_version=None,
+        scores=naked, overall=naked.overall(),
+    )
+    kernel_entry = BenchmarkEntry(
+        timestamp=ts, model=MODEL, kernel_version=None,
+        scores=kernel, overall=kernel.overall(),
+    )
 
     existing = load_scores()
     if existing is None:
-        # First run — seed baseline
-        entry = BenchmarkEntry(
-            timestamp=now_iso(), model=MODEL, kernel_version=None,
-            scores=scores, overall=scores.overall(),
-        )
-        sf = ScoresFile(baseline=entry, mutations=[])
+        sf = ScoresFile(naked=naked_entry, baseline=kernel_entry, mutations=[])
         save_scores(sf)
-        print("Baseline seeded — no prior scores to compare")
+        print("\n  Baseline seeded — no prior scores to compare")
     else:
-        # Update baseline scores
-        existing.baseline = BenchmarkEntry(
-            timestamp=now_iso(), model=MODEL, kernel_version=None,
-            scores=scores, overall=scores.overall(),
-        )
+        existing.naked = naked_entry
+        existing.baseline = kernel_entry
         save_scores(existing)
-        print("Scores updated")
-
-    for dim in scores.to_dict():
-        print(f"  {dim}: {getattr(scores, dim):.2f}")
-    print(f"  overall: {scores.overall():.2f}")
+        print("\n  Scores updated")
 
 
 @benchmark_app.command()
@@ -194,9 +203,11 @@ def compare(
     from cortex.benchmark import (
         BenchmarkEntry,
         ScoresFile,
+        append_run_log,
         check_ollama,
         check_promptfoo,
         compare_scores,
+        format_comparison_table,
         load_scores,
         now_iso,
         parse_results,
@@ -234,29 +245,36 @@ def compare(
                 print(result.stderr, file=sys.stderr)
         raise typer.Exit(code=1)
 
-    scores = parse_results(output_path)
+    naked = parse_results(output_path, provider_label="baseline")
+    kernel = parse_results(output_path, provider_label="with-kernel")
     output_path.unlink(missing_ok=True)
+
+    # Log every run
+    append_run_log(naked, kernel)
+
+    # Print comparison table
+    for line in format_comparison_table(naked, kernel):
+        print(line)
 
     existing = load_scores()
     if existing is None:
         # First run — seed baseline, no comparison possible
-        entry = BenchmarkEntry(
-            timestamp=now_iso(), model=MODEL, kernel_version=None,
-            scores=scores, overall=scores.overall(),
+        ts = now_iso()
+        sf = ScoresFile(
+            naked=BenchmarkEntry(timestamp=ts, model=MODEL, kernel_version=None, scores=naked, overall=naked.overall()),
+            baseline=BenchmarkEntry(timestamp=ts, model=MODEL, kernel_version=None, scores=kernel, overall=kernel.overall()),
+            mutations=[],
         )
-        sf = ScoresFile(baseline=entry, mutations=[])
         save_scores(sf)
-        print("No prior baseline — scores saved as new baseline")
-        for dim in scores.to_dict():
-            print(f"  {dim}: {getattr(scores, dim):.2f}")
-        print(f"  overall: {scores.overall():.2f}")
+        print("\n  No prior baseline — scores saved as new baseline")
         return
 
     baseline_overall = existing.last_accepted_overall()
     if baseline_overall is None:
         baseline_overall = 0.0
 
-    passed, messages = compare_scores(scores, baseline_overall)
+    passed, messages = compare_scores(kernel, baseline_overall)
+    print()
     for msg in messages:
         print(msg)
 
