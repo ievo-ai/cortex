@@ -1,29 +1,29 @@
 {
   "naked": {
-    "timestamp": "2026-03-06T16:01:49.928691+00:00",
+    "timestamp": "2026-03-06T16:14:36.640663+00:00",
     "model": "claude-haiku-4-5-20251001",
     "kernel_version": null,
     "scores": {
       "structure_adherence": 0.0,
-      "challenge_reflex": 0.0,
+      "challenge_reflex": 1.0,
       "plan_first": 0.0,
-      "decision_logging": 1.0,
-      "ac_verification": 1.0,
+      "decision_logging": 0.0,
+      "ac_verification": 0.0,
       "evolution_awareness": 0.0
     },
-    "overall": 0.3333333333333333
+    "overall": 0.16666666666666666
   },
   "baseline": {
-    "timestamp": "2026-03-06T16:01:49.928691+00:00",
+    "timestamp": "2026-03-06T16:14:36.640663+00:00",
     "model": "claude-haiku-4-5-20251001",
     "kernel_version": null,
     "scores": {
       "structure_adherence": 0.0,
-      "challenge_reflex": 0.0,
+      "challenge_reflex": 1.0,
       "plan_first": 0.0,
-      "decision_logging": 1.0,
-      "ac_verification": 1.0,
-      "evolution_awareness": 0.0
+      "decision_logging": 0.0,
+      "ac_verification": 0.0,
+      "evolution_awareness": 1.0
     },
     "overall": 0.3333333333333333
   },
