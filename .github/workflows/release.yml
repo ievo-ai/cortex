@@ -69,4 +69,4 @@ jobs:
           gh release create "$VERSION" \
             --title "Cortex $VERSION" \
             --generate-notes \
-            dist/*
+            dist/cortex-*.tar.gz dist/pkg/*
