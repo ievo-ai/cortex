@@ -1,0 +1,14 @@
+description: "ievo skill benchmark"
+tests:
+  - description: test_delegates_to_evolution
+    vars:
+      prompt: "Use /ievo to analyze this error."
+    assert:
+      - type: llm-rubric
+        value: "Delegates to the evolution agent"
+  - description: test_format_matches_template
+    vars:
+      prompt: "Trigger /ievo for the following finding."
+    assert:
+      - type: icontains
+        value: "evolution"

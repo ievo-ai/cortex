@@ -430,6 +430,25 @@ def compare_scores(
     return passed, messages
 
 
+def append_skill_run_log(
+    skill_name: str,
+    scores: dict[str, float],
+    overall: float,
+) -> None:
+    """Append a skill run entry to the JSONL log file."""
+    RUNS_LOG.parent.mkdir(parents=True, exist_ok=True)
+    entry: dict = {
+        "timestamp": now_iso(),
+        "type": "skill",
+        "model": MODEL,
+        "skill": skill_name,
+        "scores": scores,
+        "overall": overall,
+    }
+    with RUNS_LOG.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
 # ---------------------------------------------------------------------------
 # Skill benchmark helpers
 # ---------------------------------------------------------------------------

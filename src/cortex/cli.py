@@ -387,5 +387,115 @@ def agent(
     save_scores(existing)
 
 
+@benchmark_app.command()
+def skill(
+    skill_path: str = typer.Argument(..., help="Path to skill markdown file"),
+) -> None:
+    """Run benchmark for a skill using its companion test config.
+
+    Reads <skill-path> and looks for benchmarks/skills/<skill-name>.yaml.
+    Injects skill content as system prompt, runs promptfoo eval, and stores
+    scores under benchmarks/scores.json skills key. Always exits 0 (report only).
+    """
+    from cortex.benchmark import (
+        ScoresFile,
+        SkillBenchmarkEntry,
+        SkillScores,
+        append_skill_run_log,
+        check_api_key,
+        check_promptfoo,
+        load_scores,
+        now_iso,
+        parse_skill_results,
+        run_promptfoo,
+        save_scores,
+        BENCHMARKS_DIR,
+        MODEL,
+    )
+    import yaml
+
+    try:
+        check_api_key()
+        check_promptfoo()
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise typer.Exit(code=1)
+
+    skill_file = Path(skill_path)
+    if not skill_file.exists():
+        print(f"Error: skill file not found: {skill_path}", file=sys.stderr)
+        raise typer.Exit(code=1)
+
+    skill_name = skill_file.stem
+    skill_test_config = BENCHMARKS_DIR / "skills" / f"{skill_name}.yaml"
+    if not skill_test_config.exists():
+        print(
+            f"No skill tests found: {skill_test_config} — create test file first",
+            file=sys.stderr,
+        )
+        raise typer.Exit(code=1)
+
+    skill_content = skill_file.read_text()
+
+    # Load skill test config and inject skill content as system prompt
+    config = yaml.safe_load(skill_test_config.read_text())
+    config["providers"] = [
+        {
+            "id": f"anthropic:messages:{MODEL}",
+            "label": "skill",
+            "config": {
+                "temperature": 0,
+                "max_tokens": 4096,
+                "systemPrompt": skill_content,
+            },
+        }
+    ]
+    config.setdefault("prompts", ["{{prompt}}"])
+    config.setdefault("defaultTest", {
+        "options": {"provider": f"anthropic:messages:{MODEL}"}
+    })
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        tmp_config = tmp / "skill_config.yaml"
+        tmp_config.write_text(yaml.dump(config, default_flow_style=False))
+        output_path = tmp / "output.json"
+
+        result = run_promptfoo(output_path, config_path=tmp_config)
+
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            print(f"Error: promptfoo eval failed (exit {result.returncode})", file=sys.stderr)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
+            raise typer.Exit(code=1)
+
+        scores, overall = parse_skill_results(output_path)
+
+    # Print per-test results
+    print(f"\n  Skill: {skill_name}")
+    print(f"  {'Test':<40} {'Score':>6}")
+    print(f"  {'-' * 48}")
+    for test_name, score in scores.items():
+        status = "PASS" if score >= 1.0 else f"{score:.0%}"
+        print(f"  {test_name:<40} {status:>6}")
+    print(f"  {'-' * 48}")
+    print(f"  {'overall':<40} {overall:>6.2f}")
+
+    # Log run
+    append_skill_run_log(skill_name, scores, overall)
+
+    # Store scores
+    ts = now_iso()
+    skill_entry = SkillBenchmarkEntry(
+        timestamp=ts, model=MODEL, scores=scores, overall=overall,
+    )
+
+    existing = load_scores()
+    if existing is None:
+        existing = ScoresFile()
+    existing.skills[skill_name] = SkillScores(baseline=skill_entry, mutations=[])
+    save_scores(existing)
+
+
 if __name__ == "__main__":
     app()

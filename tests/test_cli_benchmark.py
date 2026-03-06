@@ -399,3 +399,148 @@ def test_benchmark_agent_cleans_temp_files(
     import os
     for td in temp_dirs_created:
         assert not os.path.exists(td), f"Temp dir not cleaned up: {td}"
+
+
+# ---------------------------------------------------------------------------
+# Subtask 03: cortex benchmark skill
+# ---------------------------------------------------------------------------
+
+
+def _mock_skill_promptfoo_success(output_path: Path, config_path: Path | None = None) -> MagicMock:
+    """Fake run_promptfoo for skill benchmark."""
+    output_path.write_text(json.dumps({
+        "results": {
+            "results": [
+                {"description": "test_delegates_to_evolution", "success": True},
+                {"description": "test_format_matches_template", "success": True},
+                {"description": "test_format_matches_template", "success": False},
+            ]
+        }
+    }))
+    result = MagicMock()
+    result.returncode = 0
+    result.stderr = ""
+    return result
+
+
+@pytest.fixture()
+def fake_env_with_skill(fake_env: Path, tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Extend fake_env with a skill file and a skill test config."""
+    skill_file = tmp_path / "ievo.md"
+    skill_file.write_text("# /ievo skill\nDelegate to the evolution agent.")
+
+    # Create benchmarks/skills/ dir under the fake BENCHMARKS_DIR
+    import cortex.benchmark as bm
+    skills_dir = bm.BENCHMARKS_DIR / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+
+    skill_config = skills_dir / "ievo.yaml"
+    skill_config.write_text("""description: "ievo skill benchmark"
+tests:
+  - description: test_delegates_to_evolution
+    vars:
+      prompt: "Use /ievo to analyze this error."
+    assert:
+      - type: llm-rubric
+        value: "Delegates to the evolution agent"
+  - description: test_format_matches_template
+    vars:
+      prompt: "Trigger /ievo for the following finding."
+    assert:
+      - type: icontains
+        value: "evolution"
+""")
+
+    return fake_env, skill_file, skill_config
+
+
+def test_benchmark_skill_help() -> None:
+    """cortex benchmark skill --help exits 0."""
+    result = runner.invoke(app, ["benchmark", "skill", "--help"])
+    assert result.exit_code == 0
+    assert "skill" in result.output.lower()
+
+
+def test_benchmark_skill_missing_skill_file(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exits 1 when skill file doesn't exist."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+
+    result = runner.invoke(app, ["benchmark", "skill", "/nonexistent/skill.md"])
+    assert result.exit_code == 1
+
+
+def test_benchmark_skill_missing_test_config(
+    fake_env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exits 1 when benchmarks/skills/<name>.yaml doesn't exist."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+
+    skill_file = tmp_path / "no-tests.md"
+    skill_file.write_text("# No test skill")
+
+    result = runner.invoke(app, ["benchmark", "skill", str(skill_file)])
+    assert result.exit_code == 1
+    assert "no skill tests found" in result.output.lower()
+
+
+def test_benchmark_skill_runs_and_prints_results(
+    fake_env_with_skill: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Successful skill run prints per-test pass/fail and overall pass rate."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+    monkeypatch.setattr(bm, "run_promptfoo", _mock_skill_promptfoo_success)
+
+    dist, skill_file, _ = fake_env_with_skill
+    result = runner.invoke(app, ["benchmark", "skill", str(skill_file)])
+
+    assert result.exit_code == 0, result.output
+    assert "pass" in result.output.lower() or "overall" in result.output.lower()
+
+
+def test_benchmark_skill_stores_scores(
+    fake_env_with_skill: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Skill run seeds baseline in scores.json under skills key."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+    monkeypatch.setattr(bm, "run_promptfoo", _mock_skill_promptfoo_success)
+
+    dist, skill_file, _ = fake_env_with_skill
+    result = runner.invoke(app, ["benchmark", "skill", str(skill_file)])
+    assert result.exit_code == 0
+
+    scores = bm.load_scores()
+    assert scores is not None
+    skill_name = skill_file.stem  # "ievo"
+    assert skill_name in scores.skills
+    assert scores.skills[skill_name].baseline is not None
+    assert len(scores.skills[skill_name].mutations) == 0
+
+
+def test_benchmark_skill_appends_run_log(
+    fake_env_with_skill: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Skill run appends to runs.jsonl with type=skill and skill=<name>."""
+    import cortex.benchmark as bm
+    monkeypatch.setattr(bm, "check_api_key", lambda: None)
+    monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
+    monkeypatch.setattr(bm, "run_promptfoo", _mock_skill_promptfoo_success)
+
+    dist, skill_file, _ = fake_env_with_skill
+    runner.invoke(app, ["benchmark", "skill", str(skill_file)])
+
+    log_path = dist.parent / "runs.jsonl"
+    lines = log_path.read_text().strip().split("\n")
+    entry = json.loads(lines[-1])
+    assert entry.get("type") == "skill"
+    assert entry.get("skill") == skill_file.stem
