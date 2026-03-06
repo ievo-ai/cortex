@@ -81,9 +81,8 @@ uv run pytest tests/ --cov
 
 ## Dependencies
 
-- `pyyaml` — YAML parsing for agent templates
-- `jinja2>=3.1` — template rendering for `src/kernel/iEVO.md.j2`
-- `lychee` — Markdown link validator (Rust binary, CI only — not a Python dependency)
+All dependencies are managed by uv — see `pyproject.toml` for the full list.
+Lychee (Markdown link validator) is a Rust binary used in CI only — not a Python dependency.
 
 ## Integration
 
