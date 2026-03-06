@@ -132,8 +132,8 @@ def test_render_template_strict_undefined_raises(tmp_path: Path) -> None:
 
 
 def test_template_source_exists() -> None:
-    """src/kernel/consciousness.md.j2 exists and is parseable by Jinja2."""
-    template_path = CORTEX_ROOT / "src" / "kernel" / "consciousness.md.j2"
+    """templates/kernel/consciousness.md.j2 exists and is parseable by Jinja2."""
+    template_path = CORTEX_ROOT / "templates" / "kernel" / "consciousness.md.j2"
     assert template_path.exists(), f"Template not found: {template_path}"
 
     env = jinja2.Environment()
@@ -143,7 +143,7 @@ def test_template_source_exists() -> None:
 
 def test_template_contains_required_variables() -> None:
     """consciousness.md.j2 contains {{ cortex_version }} and no provider Jinja2 references (AC-1)."""
-    template_path = CORTEX_ROOT / "src" / "kernel" / "consciousness.md.j2"
+    template_path = CORTEX_ROOT / "templates" / "kernel" / "consciousness.md.j2"
     source = template_path.read_text()
 
     assert "{{ cortex_version }}" in source, "Missing {{ cortex_version }} placeholder"
@@ -206,8 +206,8 @@ def test_build_fails_on_missing_template(tmp_path: Path) -> None:
 def test_build_fails_on_undefined_variable(tmp_path: Path) -> None:
     """build() raises jinja2.UndefinedError when template has unknown variable."""
     # Create a bad template under a structure that matches the loader_root expectation
-    src_dir = tmp_path / "src"
-    bad_template = src_dir / "kernel" / "consciousness.md.j2"
+    templates_dir = tmp_path / "templates"
+    bad_template = templates_dir / "kernel" / "consciousness.md.j2"
     bad_template.parent.mkdir(parents=True)
     bad_template.write_text("Version: {{ undefined_var }}\n")
 

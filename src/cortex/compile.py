@@ -5,7 +5,7 @@ NOT package build (use `uv build` for that).
 
 iEVO.md is rendered ONCE (provider-agnostic) → dist/iEVO.md.
 For each provider target (claude, codex):
-    - Renders provider-specific artifacts from src/
+    - Renders provider-specific artifacts from templates/
     - Writes to dist/<provider>/
     - Creates dist/cortex-<tag>.tar.gz with iEVO.md at root + provider directories
 
@@ -27,9 +27,9 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-# CORTEX_ROOT is the repo root (one level above this package directory)
-CORTEX_ROOT = Path(__file__).parent.parent
-IEVO_MD_TEMPLATE = CORTEX_ROOT / "src" / "kernel" / "consciousness.md.j2"
+# CORTEX_ROOT is the repo root (two levels above: src/cortex/ → repo root)
+CORTEX_ROOT = Path(__file__).parent.parent.parent
+IEVO_MD_TEMPLATE = CORTEX_ROOT / "templates" / "kernel" / "consciousness.md.j2"
 
 
 def render_template(
@@ -67,8 +67,8 @@ def render_template(
     return template.render(**context)
 
 
-CLAUDE_AGENTS_SRC = CORTEX_ROOT / "src" / "agents"
-CODEX_SRC = CORTEX_ROOT / "src" / "codex"
+CLAUDE_AGENTS_SRC = CORTEX_ROOT / "templates" / "agents"
+CODEX_SRC = CORTEX_ROOT / "templates" / "codex"
 
 
 def validate_links(dist_dir: Path) -> int:
@@ -122,7 +122,7 @@ def render_ievo_md(dist_dir: Path, tag: str) -> None:
     rendered = render_template(
         IEVO_MD_TEMPLATE,
         {"cortex_version": tag},
-        CORTEX_ROOT / "src",
+        CORTEX_ROOT / "templates",
     )
     (dist_dir / "iEVO.md").write_text(rendered)
 

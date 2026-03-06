@@ -15,19 +15,20 @@ For detailed architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ```
 cortex/
 ├── src/
-│   ├── agents/         # Agent YAML templates (provider-agnostic)
-│   ├── skills/         # Skill YAML templates
-│   └── kernel/
-│       └── iEVO.md.j2  # iEVO pipeline conventions — Jinja2 template source
-├── tests/              # Build script tests
+│   └── cortex/          # Python package (cli.py, compile.py, version.py)
+├── templates/
+│   ├── kernel/          # Brain region .md files + consciousness.md.j2
+│   ├── agents/          # Agent templates (provider-agnostic)
+│   └── codex/           # Codex target (BUILD_TARGET.md placeholder)
+├── tests/               # Build script tests
 └── .github/
     └── workflows/
-        └── release.yml # CI: tag push → build → lychee link validation → GitHub Release asset
+        └── release.yml  # CI: push to main → build → validate → GitHub Release + PyPI
 ```
 
 ## Template variables
 
-The `src/kernel/iEVO.md.j2` template supports the following variables:
+The `templates/kernel/consciousness.md.j2` template supports the following variables:
 
 | Variable | Type | Source | Example |
 |----------|------|--------|---------|
@@ -45,7 +46,7 @@ Each GitHub Release includes `cortex-<tag>.tar.gz` containing:
 
 ```
 cortex-<tag>.tar.gz
-├── iEVO.md             # Rendered from src/kernel/iEVO.md.j2 (provider-agnostic)
+├── iEVO.md             # Rendered from templates/kernel/consciousness.md.j2 (provider-agnostic)
 ├── claude/             # Claude Code provider artifacts
 │   └── agents/
 │       └── *.md        # Agent templates rendered for Claude Code
@@ -101,7 +102,7 @@ Lychee (Markdown link validator) is a Rust binary used in CI only — not a Pyth
 git clone https://github.com/ievo-ai/cortex
 cd cortex
 uv sync --extra dev        # installs cortex + pytest + ruff + mypy + watchfiles
-uv run cortex dev --watch  # hot-reload on src/ template changes
+uv run cortex dev --watch  # hot-reload on templates/ changes
 ```
 
 Run tests:
