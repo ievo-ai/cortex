@@ -36,7 +36,7 @@ The compiled `dist/iEVO.md` is the kernel — one file that every iEvo agent rea
 # Compile once
 uv run cortex compile
 
-# Watch mode — recompiles on any src/ change
+# Watch mode — recompiles on any templates/ change
 uv run cortex dev --watch
 
 # Validate links in dist/

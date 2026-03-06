@@ -10,49 +10,55 @@ HTTPS during `ievo init` and unpacks it into the project's `.ievo/` directory.
 
 ## 2. Module Structure
 
-The `cortex/` Python package contains:
+The `src/cortex/` Python package contains:
 
 | Module | Responsibility |
 |--------|---------------|
-| `cortex/__init__.py` | Re-exports `__version__` from `version.py` |
-| `cortex/version.py` | CalVer version string (`__version__`). Static `"0.1.0"` in source; `scripts/version_bump.py` overwrites it with a timestamp string on each CI release. |
-| `cortex/cli.py` | Typer application with three commands: `compile`, `validate`, `dev`. Imports from `compile.py` and `version.py`. |
-| `cortex/compile.py` | Core compilation logic: template rendering, provider artifact assembly, tarball creation, link validation. |
+| `src/cortex/__init__.py` | Re-exports `__version__` from `version.py` |
+| `src/cortex/version.py` | CalVer version string (`__version__`). Static `"0.1.0"` in source; `scripts/version_bump.py` overwrites it with a timestamp string on each CI release. |
+| `src/cortex/cli.py` | Typer application with three commands: `compile`, `validate`, `dev`. Imports from `compile.py` and `version.py`. |
+| `src/cortex/compile.py` | Core compilation logic: template rendering, provider artifact assembly, tarball creation, link validation. |
 
-## 3. Source Templates (`src/`)
+## 3. Source Templates (`templates/`)
 
 ```
-src/
+templates/
 ├── kernel/
-│   ├── iEVO.md.j2      # Jinja2 template — provider-agnostic pipeline conventions
-│   └── iEVO.yaml       # Kernel source data (YAML, unused in v1 rendering pipeline)
+│   ├── consciousness.md.j2  # Master Jinja2 template — assembles brain regions
+│   ├── brainstem.md          # Structure & conventions
+│   ├── instincts.md          # Core reflexes
+│   ├── limbic.md             # Pipeline rules
+│   ├── neocortex.md          # Best practices
+│   ├── prefrontal.md         # Evolution & meta-learning
+│   ├── sessions.md           # Working memory
+│   └── iEVO.yaml             # Kernel source data (YAML, unused in v1 rendering pipeline)
 ├── agents/
-│   └── spec-writer.yaml # Agent template source (YAML)
-└── skills/
-    └── backlog.yaml     # Skill template source (YAML)
+│   └── spec-writer.md        # Agent template source
+└── codex/
+    └── BUILD_TARGET.md       # Codex placeholder (IDEA-005)
 ```
 
-The `iEVO.md.j2` template accepts one variable:
+The `consciousness.md.j2` template accepts one variable:
 
 | Variable | Type | Source | Example |
 |----------|------|--------|---------|
 | `cortex_version` | string | CLI `__version__` or `"dev"` literal | `"26.03.06.1200"` |
 
-The `.yaml` sources under `agents/` and `skills/` define the canonical agent/skill data.
-In v1, `build_claude_target()` uses a hardcoded template string (`CLAUDE_AGENT_MD`);
-future versions will load these YAML sources directly.
+The `.md` sources under `templates/agents/` and `templates/codex/` are copied directly
+to the dist output by `build_claude_target()` and `build_codex_target()`.
 
 ## 4. Compile Pipeline
 
 Data flow through the compile pipeline:
 
 ```
-src/kernel/iEVO.md.j2
+templates/kernel/consciousness.md.j2 ({% include %} brain regions)
   └──render_template()──► dist/iEVO.md          (provider-agnostic, tarball root)
 
-CLAUDE_AGENT_MD (hardcoded v1)
+templates/agents/*.md
   └──build_claude_target()──► dist/claude/agents/*.md   (Claude Code format)
-(placeholder)
+
+templates/codex/*.md
   └──build_codex_target()──►  dist/codex/BUILD_TARGET.md (placeholder, IDEA-005)
 
 dist/iEVO.md
@@ -74,7 +80,7 @@ It does NOT call `validate_links()` — that is the CLI layer's responsibility.
 | `cortex dev` | Development build, optional `--watch` | `"dev"` literal | No |
 
 `compile` and `dev` both call `build()`. The `--watch` flag on `dev` uses
-`watchfiles` to monitor `src/` for changes and triggers `build()` on each change.
+`watchfiles` to monitor `templates/` for changes and triggers `build()` on each change.
 `validate` calls `validate_links()` directly without recompiling.
 
 ## 6. Provider Targets
@@ -91,8 +97,8 @@ its own copy (see `REQ-004` comment in `compile.py`).
 ## 7. Version Scheme
 
 - **Format:** CalVer `YY.MM.DD.HHMM` (2-digit year, e.g. `"26.03.06.1200"`)
-- **Local source:** `cortex/version.py` contains a static string (currently `"0.1.0"`)
-- **CI release:** `scripts/version_bump.py` overwrites `cortex/version.py` with the
+- **Local source:** `src/cortex/version.py` contains a static string (currently `"0.1.0"`)
+- **CI release:** `scripts/version_bump.py` overwrites `src/cortex/version.py` with the
   current timestamp before `hatchling` builds the package. The published package
   carries the CalVer string; the source file always reads `"0.1.0"` between releases.
 - **Dev builds:** the `dev` CLI command passes the literal string `"dev"` as the tag
@@ -132,13 +138,14 @@ identity token — no secrets to manage.
 3. The first successful workflow run auto-creates the `ievo-cortex` project on PyPI.
 
 **Package naming:** The PyPI distribution name (`ievo-cortex`) differs from the Python
-import name (`cortex`). The `cortex/` source directory is unchanged — `import cortex`
-continues to work. Only the `[project] name` in `pyproject.toml` was renamed.
+import name (`cortex`). The Python package lives at `src/cortex/` — `import cortex`
+works via the `pythonpath = ["src"]` pytest config and hatch src layout. Only the
+`[project] name` in `pyproject.toml` was renamed.
 
 ## 10. Brain Regions — Kernel Architecture
 
 The kernel (iEVO.md) is decomposed into functional regions inspired by the human brain.
-Each region is a separate `.md` file in `src/kernel/`. The master template
+Each region is a separate `.md` file in `templates/kernel/`. The master template
 `consciousness.md.j2` assembles them into a single consciousness file via
 Jinja2 `{% include %}`.
 
@@ -193,7 +200,7 @@ being accepted. The pipeline:
 
 ```
 cortex mutate "lesson"
-  → applies change to brain region file in src/kernel/
+  → applies change to brain region file in templates/kernel/
   → cortex compile (new consciousness)
   → run cognitive benchmark suite (SWE-bench-like for kernel quality)
   → compare scores against baseline

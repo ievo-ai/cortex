@@ -1,4 +1,4 @@
-"""Update version in cortex/version.py with CalVer timestamp."""
+"""Update version in src/cortex/version.py with CalVer timestamp."""
 
 import datetime
 from pathlib import Path
