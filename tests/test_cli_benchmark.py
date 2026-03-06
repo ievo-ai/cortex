@@ -120,16 +120,21 @@ def test_benchmark_run_ollama_down(fake_env: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_benchmark_run_promptfoo_fail(fake_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Exits 1 when promptfoo eval fails."""
+    """Exits 1 when promptfoo eval fails (no output file written)."""
     import cortex.benchmark as bm
 
     monkeypatch.setattr(bm, "check_ollama", lambda: None)
     monkeypatch.setattr(bm, "check_promptfoo", lambda: "promptfoo")
 
-    fail_result = MagicMock()
-    fail_result.returncode = 1
-    fail_result.stderr = "some error"
-    monkeypatch.setattr(bm, "run_promptfoo", lambda p: fail_result)
+    def _fail_promptfoo(p: Path) -> MagicMock:
+        # Don't write output file — simulates real failure
+        p.unlink(missing_ok=True)
+        r = MagicMock()
+        r.returncode = 1
+        r.stderr = "some error"
+        return r
+
+    monkeypatch.setattr(bm, "run_promptfoo", _fail_promptfoo)
 
     result = runner.invoke(app, ["benchmark", "run", "--dist", str(fake_env)])
     assert result.exit_code == 1

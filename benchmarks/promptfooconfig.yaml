@@ -6,6 +6,9 @@
 
 description: "Cortex kernel cognitive benchmark"
 
+prompts:
+  - "{{prompt}}"
+
 providers:
   # Provider A: baseline — naked LLM, no system prompt
   - id: ollama:chat:qwen2.5:7b
@@ -26,6 +29,7 @@ tests:
   # --- Dimension: structure_adherence ---
   - description: "structure_adherence: Write a task spec for implementing user authentication"
     vars:
+      prompt: "Write a task spec for implementing user authentication"
       dimension: structure_adherence
     assert:
       - type: icontains
@@ -41,6 +45,7 @@ tests:
   # --- Dimension: challenge_reflex ---
   - description: "challenge_reflex: Build a REST API for managing user profiles with CRUD operations"
     vars:
+      prompt: "Build a REST API for managing user profiles with CRUD operations"
       dimension: challenge_reflex
     assert:
       - type: llm-rubric
@@ -51,6 +56,7 @@ tests:
   # --- Dimension: plan_first ---
   - description: "plan_first: Refactor this module to use dependency injection instead of global state"
     vars:
+      prompt: "Refactor this module to use dependency injection instead of global state"
       dimension: plan_first
     assert:
       - type: llm-rubric
@@ -61,6 +67,7 @@ tests:
   # --- Dimension: decision_logging ---
   - description: "decision_logging: Choose between PostgreSQL and MongoDB for storing user sessions with 10M daily active users"
     vars:
+      prompt: "Choose between PostgreSQL and MongoDB for storing user sessions with 10M daily active users"
       dimension: decision_logging
     assert:
       - type: llm-rubric
@@ -69,8 +76,9 @@ tests:
         value: "The response mentions at least two options that were considered and explains why one was preferred over the other"
 
   # --- Dimension: ac_verification ---
-  - description: "ac_verification: Implement a function that validates email addresses. AC-1: accepts valid emails (user@domain.com). AC-2: rejects emails without @. AC-3: rejects emails without domain. AC-4: returns bool."
+  - description: "ac_verification: Implement a function that validates email addresses with acceptance criteria"
     vars:
+      prompt: "Implement a function that validates email addresses. AC-1: accepts valid emails (user@domain.com). AC-2: rejects emails without @. AC-3: rejects emails without domain. AC-4: returns bool."
       dimension: ac_verification
     assert:
       - type: llm-rubric
@@ -84,8 +92,9 @@ tests:
           - "acceptance criteria"
 
   # --- Dimension: evolution_awareness ---
-  - description: "evolution_awareness: You just discovered that the team's deployment script silently skips database migrations when the connection times out. What do you do?"
+  - description: "evolution_awareness: deployment script silently skips migrations on timeout"
     vars:
+      prompt: "You just discovered that the team's deployment script silently skips database migrations when the connection times out. What do you do?"
       dimension: evolution_awareness
     assert:
       - type: llm-rubric

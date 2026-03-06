@@ -144,7 +144,9 @@ def run(
         output_path = Path(tmp.name)
 
     result = run_promptfoo(output_path)
-    if result.returncode != 0:
+    # promptfoo exits non-zero when assertions fail (expected).
+    # Only treat as error if output file wasn't written.
+    if not output_path.exists() or output_path.stat().st_size == 0:
         if "not found" in (result.stderr or "").lower():
             print(f"Error: Model {MODEL} not found — pull with: ollama pull {MODEL}", file=sys.stderr)
         else:
@@ -221,7 +223,9 @@ def compare(
         output_path = Path(tmp.name)
 
     result = run_promptfoo(output_path)
-    if result.returncode != 0:
+    # promptfoo exits non-zero when assertions fail (expected).
+    # Only treat as error if output file wasn't written.
+    if not output_path.exists() or output_path.stat().st_size == 0:
         if "not found" in (result.stderr or "").lower():
             print(f"Error: Model {MODEL} not found — pull with: ollama pull {MODEL}", file=sys.stderr)
         else:

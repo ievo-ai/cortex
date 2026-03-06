@@ -1,0 +1,17 @@
+{
+  "baseline": {
+    "timestamp": "2026-03-06T14:46:02.277012+00:00",
+    "model": "qwen2.5:7b",
+    "kernel_version": null,
+    "scores": {
+      "structure_adherence": 0.0,
+      "challenge_reflex": 0.0,
+      "plan_first": 1.0,
+      "decision_logging": 1.0,
+      "ac_verification": 1.0,
+      "evolution_awareness": 0.0
+    },
+    "overall": 0.5
+  },
+  "mutations": []
+}
