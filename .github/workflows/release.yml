@@ -27,7 +27,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Lint
-        run: uv run ruff check cortex/
+        run: uv run ruff check src/cortex/
 
       - name: Test
         run: uv run pytest tests/ -v
@@ -36,7 +36,7 @@ jobs:
         id: version
         run: |
           python scripts/version_bump.py
-          VERSION=$(python -c "import ast; print(ast.literal_eval(open('cortex/version.py').read().split('=')[1].strip()))")
+          VERSION=$(python -c "import ast; print(ast.literal_eval(open('src/cortex/version.py').read().split('=')[1].strip()))")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Compile release artifacts

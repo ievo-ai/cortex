@@ -9,7 +9,7 @@ from pathlib import Path
 
 from cortex.compile import CORTEX_ROOT, build, render_ievo_md
 
-KERNEL_DIR = CORTEX_ROOT / "src" / "kernel"
+KERNEL_DIR = CORTEX_ROOT / "templates" / "kernel"
 
 BRAIN_REGIONS = [
     "brainstem.md",
@@ -31,7 +31,7 @@ REGION_HEADINGS = [
 
 
 def test_brain_region_files_exist() -> None:
-    """All 6 brain region .md files and consciousness.md.j2 exist in src/kernel/."""
+    """All 6 brain region .md files and consciousness.md.j2 exist in templates/kernel/."""
     for region in BRAIN_REGIONS:
         path = KERNEL_DIR / region
         assert path.exists(), f"Missing brain region file: {path}"

@@ -61,7 +61,7 @@ def validate(
 
 @app.command()
 def dev(
-    watch: bool = typer.Option(False, "--watch", help="Watch src/ for changes and recompile"),
+    watch: bool = typer.Option(False, "--watch", help="Watch templates/ for changes and recompile"),
     dist: str = typer.Option("./dist", help="Output directory"),
 ) -> None:
     """Single compile for development. Use --watch to recompile on file changes.
@@ -87,7 +87,7 @@ def dev(
         raise typer.Exit(code=1)
 
     try:
-        for changes in fs_watch(CORTEX_ROOT / "src"):
+        for changes in fs_watch(CORTEX_ROOT / "templates"):
             print(f"Recompiling... {changes}")
             build(tag="dev", dist_dir=dist_path)
             validate_links(dist_path)
