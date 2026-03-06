@@ -33,10 +33,31 @@ def test_ci_has_uv_build_step() -> None:
     assert "uv build" in content, "Expected 'uv build' step in release.yml"
 
 
-def test_ci_has_uv_publish_step() -> None:
-    """release.yml contains 'uv publish' step for PyPI publish."""
+def test_ci_has_pypi_publish_action() -> None:
+    """release.yml uses pypa/gh-action-pypi-publish for OIDC trusted publisher (REQ-022 AC-3, AC-5).
+    Replaces 'uv publish' + PYPI_TOKEN secret with OIDC publishing.
+    """
     content = RELEASE_YML.read_text()
-    assert "uv publish" in content, "Expected 'uv publish' step in release.yml"
+    assert "pypa/gh-action-pypi-publish" in content, (
+        "Expected 'pypa/gh-action-pypi-publish' in release.yml (OIDC trusted publisher)"
+    )
+    assert "uv publish" not in content, (
+        "release.yml still uses 'uv publish' — should use pypa/gh-action-pypi-publish"
+    )
+    assert "PYPI_TOKEN" not in content, (
+        "release.yml still references PYPI_TOKEN secret — should use OIDC (no secret needed)"
+    )
+
+
+def test_ci_has_oidc_permissions() -> None:
+    """release.yml has id-token: write permission for OIDC (REQ-022 AC-4)."""
+    content = RELEASE_YML.read_text()
+    assert "id-token: write" in content, (
+        "release.yml missing 'id-token: write' permission required for OIDC publishing"
+    )
+    assert "contents: write" in content, (
+        "release.yml missing 'contents: write' permission required for gh release create"
+    )
 
 
 def test_ci_has_version_bump() -> None:
